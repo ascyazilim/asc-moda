@@ -1,6 +1,5 @@
 package com.asc.userservice.security;
 
-import com.asc.userservice.service.UserDetailsServiceImpl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
