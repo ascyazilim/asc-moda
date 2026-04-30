@@ -1,35 +1,5 @@
-server:
-  port: ${INVENTORY_SERVICE_PORT:0}
-
 spring:
   application:
     name: inventory-service
   config:
     import: "optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}"
-  datasource:
-    url: "${INVENTORY_DB_URL:jdbc:postgresql://localhost:5432/asc_moda_inventory}"
-    username: ${INVENTORY_DB_USERNAME:${POSTGRES_USER:asc_moda}}
-    password: ${INVENTORY_DB_PASSWORD:${POSTGRES_PASSWORD:asc_moda}}
-  flyway:
-    enabled: true
-  jpa:
-    hibernate:
-      ddl-auto: validate
-    open-in-view: false
-
-eureka:
-  client:
-    service-url:
-      defaultZone: "${EUREKA_DEFAULT_ZONE:http://localhost:8761/eureka/}"
-  instance:
-    prefer-ip-address: true
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info
-  endpoint:
-    health:
-      probes:
-        enabled: true

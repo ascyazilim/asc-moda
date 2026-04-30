@@ -1,4 +1,4 @@
-package com.ascmoda.services.inventory;
+package com.ascmoda.inventory;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
