@@ -1,0 +1,40 @@
+server:
+  port: ${NOTIFICATION_SERVICE_PORT:0}
+
+spring:
+  application:
+    name: notification-service
+  config:
+    import: "optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}"
+  datasource:
+    url: "${NOTIFICATION_DB_URL:jdbc:postgresql://localhost:5432/asc_moda_notification}"
+    username: ${NOTIFICATION_DB_USERNAME:${POSTGRES_USER:asc_moda}}
+    password: ${NOTIFICATION_DB_PASSWORD:${POSTGRES_PASSWORD:asc_moda}}
+  flyway:
+    enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:asc_moda}
+    password: ${RABBITMQ_PASSWORD:asc_moda}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: "${EUREKA_DEFAULT_ZONE:http://localhost:8761/eureka/}"
+  instance:
+    prefer-ip-address: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
