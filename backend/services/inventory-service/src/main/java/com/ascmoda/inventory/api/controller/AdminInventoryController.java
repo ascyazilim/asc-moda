@@ -3,9 +3,14 @@ package com.ascmoda.inventory.api.controller;
 import com.ascmoda.inventory.api.dto.AdjustStockRequest;
 import com.ascmoda.inventory.api.dto.CreateInventoryItemRequest;
 import com.ascmoda.inventory.api.dto.InventoryItemResponse;
+import com.ascmoda.inventory.api.dto.InventorySummaryResponse;
 import com.ascmoda.inventory.api.dto.StockMovementResponse;
+import com.ascmoda.inventory.api.dto.StockReservationResponse;
 import com.ascmoda.inventory.api.dto.UpdateInventoryItemRequest;
 import com.ascmoda.inventory.application.service.InventoryService;
+import com.ascmoda.inventory.domain.model.ReferenceType;
+import com.ascmoda.inventory.domain.model.StockMovementType;
+import com.ascmoda.inventory.domain.model.StockReservationStatus;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -13,6 +18,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -22,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @RestController
@@ -54,9 +61,26 @@ public class AdminInventoryController {
     public Page<InventoryItemResponse> list(
             @RequestParam(required = false) Boolean active,
             @RequestParam(required = false) String sku,
+            @RequestParam(required = false) UUID productVariantId,
+            @RequestParam(required = false) Integer lowStockThreshold,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
-        return inventoryService.listAdmin(active, sku, pageable);
+        return inventoryService.listAdmin(active, sku, productVariantId, lowStockThreshold, pageable);
+    }
+
+    @PatchMapping("/{id}/activate")
+    public InventoryItemResponse activate(@PathVariable UUID id) {
+        return inventoryService.activate(id);
+    }
+
+    @PatchMapping("/{id}/deactivate")
+    public InventoryItemResponse deactivate(@PathVariable UUID id) {
+        return inventoryService.deactivate(id);
+    }
+
+    @GetMapping("/summary")
+    public InventorySummaryResponse summary() {
+        return inventoryService.summary();
     }
 
     @PostMapping("/adjust")
@@ -76,8 +100,47 @@ public class AdminInventoryController {
     public Page<StockMovementResponse> movements(
             @RequestParam(required = false) UUID inventoryItemId,
             @RequestParam(required = false) String sku,
+            @RequestParam(required = false) StockMovementType movementType,
+            @RequestParam(required = false) ReferenceType referenceType,
+            @RequestParam(required = false) String referenceId,
+            @RequestParam(required = false) Instant createdFrom,
+            @RequestParam(required = false) Instant createdTo,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
-        return inventoryService.listMovements(inventoryItemId, sku, pageable);
+        return inventoryService.listMovements(
+                inventoryItemId,
+                sku,
+                movementType,
+                referenceType,
+                referenceId,
+                createdFrom,
+                createdTo,
+                pageable
+        );
+    }
+
+    @GetMapping("/reservations")
+    public Page<StockReservationResponse> reservations(
+            @RequestParam(required = false) StockReservationStatus status,
+            @RequestParam(required = false) UUID inventoryItemId,
+            @RequestParam(required = false) UUID productVariantId,
+            @RequestParam(required = false) String sku,
+            @RequestParam(required = false) ReferenceType referenceType,
+            @RequestParam(required = false) String referenceId,
+            @RequestParam(required = false) Instant createdFrom,
+            @RequestParam(required = false) Instant createdTo,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
+    ) {
+        return inventoryService.listReservations(
+                status,
+                inventoryItemId,
+                productVariantId,
+                sku,
+                referenceType,
+                referenceId,
+                createdFrom,
+                createdTo,
+                pageable
+        );
     }
 }

@@ -4,7 +4,13 @@ import java.util.UUID;
 
 public record CatalogVariantResponse(
         UUID id,
+        UUID productId,
+        String productName,
+        String productSlug,
+        String productStatus,
         String sku,
-        boolean active
+        String color,
+        String size,
+        boolean variantActive
 ) {
 }

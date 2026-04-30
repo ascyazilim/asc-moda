@@ -2,6 +2,7 @@ package com.ascmoda.inventory.api.error;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -23,6 +24,12 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), request, List.of());
     }
 
+    @ExceptionHandler(ReservationNotFoundException.class)
+    public ResponseEntity<ProblemDetail> handleReservationNotFound(ReservationNotFoundException ex,
+                                                                   HttpServletRequest request) {
+        return build(HttpStatus.NOT_FOUND, ex.getMessage(), request, List.of());
+    }
+
     @ExceptionHandler(DuplicateInventoryItemException.class)
     public ResponseEntity<ProblemDetail> handleDuplicate(DuplicateInventoryItemException ex,
                                                          HttpServletRequest request) {
@@ -31,11 +38,18 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({
             InvalidStockStateException.class,
+            InvalidReservationStateException.class,
             ExternalCatalogValidationException.class,
             IllegalStateException.class
     })
     public ResponseEntity<ProblemDetail> handleBusinessRule(RuntimeException ex, HttpServletRequest request) {
         return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), request, List.of());
+    }
+
+    @ExceptionHandler(ExternalServiceUnavailableException.class)
+    public ResponseEntity<ProblemDetail> handleExternalServiceUnavailable(ExternalServiceUnavailableException ex,
+                                                                          HttpServletRequest request) {
+        return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request, List.of());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -62,6 +76,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ProblemDetail> handleDataIntegrity(DataIntegrityViolationException ex,
                                                              HttpServletRequest request) {
         return build(HttpStatus.CONFLICT, dataIntegrityMessage(ex), request, List.of());
+    }
+
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ProblemDetail> handleOptimisticLock(ObjectOptimisticLockingFailureException ex,
+                                                              HttpServletRequest request) {
+        return build(HttpStatus.CONFLICT, "Inventory item was modified concurrently", request, List.of());
     }
 
     private FieldValidationError toFieldError(FieldError error) {
@@ -92,6 +112,15 @@ public class GlobalExceptionHandler {
         }
         if (normalizedMessage.contains("ck_inventory_items_quantities")) {
             return "Inventory quantities are not in a valid state";
+        }
+        if (normalizedMessage.contains("uk_stock_reservations_key")) {
+            return "Stock reservation key already exists";
+        }
+        if (normalizedMessage.contains("ux_stock_reservations_reference_active")) {
+            return "Active stock reservation already exists for reference";
+        }
+        if (normalizedMessage.contains("ck_stock_reservations_quantity")) {
+            return "Stock reservation quantity is not valid";
         }
 
         return "Inventory data constraint violation";

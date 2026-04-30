@@ -1,33 +1,24 @@
 package com.ascmoda.inventory.api.dto;
 
 import com.ascmoda.inventory.domain.model.ReferenceType;
-import jakarta.validation.constraints.Positive;
-import jakarta.validation.constraints.Size;
+import com.ascmoda.inventory.domain.model.StockReservationStatus;
 
 import java.time.Instant;
 import java.util.UUID;
 
-public record ReserveStockRequest(
+public record StockReservationResponse(
+        UUID id,
         UUID inventoryItemId,
         UUID productVariantId,
-
-        @Size(max = 120)
         String sku,
-
-        @Positive
-        int quantity,
-
-        @Size(max = 1000)
-        String note,
-
         ReferenceType referenceType,
-
-        @Size(max = 120)
         String referenceId,
-
-        @Size(max = 160)
         String reservationKey,
-
-        Instant expiresAt
+        int quantity,
+        StockReservationStatus status,
+        Instant expiresAt,
+        Long version,
+        Instant createdAt,
+        Instant updatedAt
 ) {
 }

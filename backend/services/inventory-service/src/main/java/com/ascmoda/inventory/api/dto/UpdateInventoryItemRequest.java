@@ -21,6 +21,9 @@ public record UpdateInventoryItemRequest(
         @PositiveOrZero
         int reservedQuantity,
 
-        Boolean active
+        Boolean active,
+
+        @PositiveOrZero
+        Integer lowStockThreshold
 ) {
 }

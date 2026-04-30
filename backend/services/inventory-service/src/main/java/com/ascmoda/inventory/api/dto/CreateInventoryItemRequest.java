@@ -21,6 +21,9 @@ public record CreateInventoryItemRequest(
         @PositiveOrZero
         int reservedQuantity,
 
-        Boolean active
+        Boolean active,
+
+        @PositiveOrZero
+        Integer lowStockThreshold
 ) {
 }

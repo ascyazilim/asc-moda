@@ -8,6 +8,13 @@ ascmoda:
 spring:
   application:
     name: inventory-service
+  cloud:
+    openfeign:
+      client:
+        config:
+          catalog-service:
+            connectTimeout: 2000
+            readTimeout: 3000
   datasource:
     url: "${INVENTORY_DB_URL:jdbc:postgresql://localhost:15432/asc_moda_inventory}"
     username: ${INVENTORY_DB_USERNAME:${POSTGRES_USER:asc_moda}}

@@ -16,6 +16,12 @@ public record StockMovementResponse(
         String note,
         ReferenceType referenceType,
         String referenceId,
+        int beforeQuantityOnHand,
+        int afterQuantityOnHand,
+        int beforeReservedQuantity,
+        int afterReservedQuantity,
+        String reason,
+        String operatorId,
         Long version,
         Instant createdAt,
         Instant updatedAt

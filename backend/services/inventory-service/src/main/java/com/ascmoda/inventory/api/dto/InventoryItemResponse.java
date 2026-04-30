@@ -10,7 +10,10 @@ public record InventoryItemResponse(
         int quantityOnHand,
         int reservedQuantity,
         int availableQuantity,
+        int lowStockThreshold,
+        boolean lowStock,
         boolean active,
+        Instant lastStockChangeAt,
         Long version,
         Instant createdAt,
         Instant updatedAt

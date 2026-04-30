@@ -9,6 +9,6 @@ import java.util.UUID;
 @FeignClient(name = "catalog-service", path = "/api/v1/internal/catalog")
 public interface CatalogVariantClient {
 
-    @GetMapping("/variants/{id}")
+    @GetMapping("/variants/{id}/details")
     CatalogVariantResponse getVariant(@PathVariable UUID id);
 }

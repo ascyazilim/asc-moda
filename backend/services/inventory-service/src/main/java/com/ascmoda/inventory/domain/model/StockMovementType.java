@@ -5,5 +5,6 @@ public enum StockMovementType {
     DECREASE,
     RESERVE,
     RELEASE,
+    CONSUME,
     ADJUSTMENT
 }

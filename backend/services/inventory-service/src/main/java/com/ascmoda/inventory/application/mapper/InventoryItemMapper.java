@@ -9,5 +9,6 @@ import org.mapstruct.Mapping;
 public interface InventoryItemMapper {
 
     @Mapping(target = "availableQuantity", expression = "java(item.availableQuantity())")
+    @Mapping(target = "lowStock", expression = "java(item.isLowStock())")
     InventoryItemResponse toResponse(InventoryItem item);
 }

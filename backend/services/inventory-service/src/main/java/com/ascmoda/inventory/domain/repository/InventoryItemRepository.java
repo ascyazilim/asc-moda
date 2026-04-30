@@ -23,8 +23,16 @@ public interface InventoryItemRepository extends JpaRepository<InventoryItem, UU
             from InventoryItem i
             where (:active is null or i.active = :active)
               and (:sku = '' or lower(i.sku) like concat('%', :sku, '%'))
+              and (:productVariantId is null or i.productVariantId = :productVariantId)
+              and (:lowStockThreshold is null or (i.quantityOnHand - i.reservedQuantity) <= :lowStockThreshold)
             """)
-    Page<InventoryItem> searchAdmin(@Param("active") Boolean active, @Param("sku") String sku, Pageable pageable);
+    Page<InventoryItem> searchAdmin(
+            @Param("active") Boolean active,
+            @Param("sku") String sku,
+            @Param("productVariantId") UUID productVariantId,
+            @Param("lowStockThreshold") Integer lowStockThreshold,
+            Pageable pageable
+    );
 
     @Query("""
             select i
@@ -33,6 +41,30 @@ public interface InventoryItemRepository extends JpaRepository<InventoryItem, UU
               and (i.quantityOnHand - i.reservedQuantity) <= :threshold
             """)
     Page<InventoryItem> findLowStock(@Param("threshold") int threshold, Pageable pageable);
+
+    @Query("""
+            select count(i)
+            from InventoryItem i
+            where i.active = true
+              and (i.quantityOnHand - i.reservedQuantity) <= i.lowStockThreshold
+            """)
+    long countLowStockItems();
+
+    @Query("""
+            select coalesce(sum(i.quantityOnHand), 0)
+            from InventoryItem i
+            """)
+    long sumQuantityOnHand();
+
+    @Query("""
+            select coalesce(sum(i.reservedQuantity), 0)
+            from InventoryItem i
+            """)
+    long sumReservedQuantity();
+
+    long countByActiveTrue();
+
+    long countByActiveFalse();
 
     boolean existsBySku(String sku);
 

@@ -52,11 +52,39 @@ public class StockMovement extends BaseAuditableEntity {
     @Column(name = "reference_id", length = 120)
     private String referenceId;
 
+    @Column(name = "before_quantity_on_hand", nullable = false)
+    private int beforeQuantityOnHand;
+
+    @Column(name = "after_quantity_on_hand", nullable = false)
+    private int afterQuantityOnHand;
+
+    @Column(name = "before_reserved_quantity", nullable = false)
+    private int beforeReservedQuantity;
+
+    @Column(name = "after_reserved_quantity", nullable = false)
+    private int afterReservedQuantity;
+
+    @Column(length = 240)
+    private String reason;
+
+    @Column(name = "operator_id", length = 120)
+    private String operatorId;
+
     protected StockMovement() {
     }
 
     public StockMovement(InventoryItem inventoryItem, StockMovementType movementType, int quantity, String note,
                          ReferenceType referenceType, String referenceId) {
+        this(inventoryItem, movementType, quantity, note, referenceType, referenceId,
+                inventoryItem.getQuantityOnHand(), inventoryItem.getQuantityOnHand(),
+                inventoryItem.getReservedQuantity(), inventoryItem.getReservedQuantity(),
+                note, null);
+    }
+
+    public StockMovement(InventoryItem inventoryItem, StockMovementType movementType, int quantity, String note,
+                         ReferenceType referenceType, String referenceId, int beforeQuantityOnHand,
+                         int afterQuantityOnHand, int beforeReservedQuantity, int afterReservedQuantity,
+                         String reason, String operatorId) {
         this.inventoryItem = inventoryItem;
         this.productVariantId = inventoryItem.getProductVariantId();
         this.sku = inventoryItem.getSku();
@@ -65,6 +93,12 @@ public class StockMovement extends BaseAuditableEntity {
         this.note = note;
         this.referenceType = referenceType;
         this.referenceId = referenceId;
+        this.beforeQuantityOnHand = beforeQuantityOnHand;
+        this.afterQuantityOnHand = afterQuantityOnHand;
+        this.beforeReservedQuantity = beforeReservedQuantity;
+        this.afterReservedQuantity = afterReservedQuantity;
+        this.reason = reason;
+        this.operatorId = operatorId;
     }
 
     public InventoryItem getInventoryItem() {
@@ -97,5 +131,29 @@ public class StockMovement extends BaseAuditableEntity {
 
     public String getReferenceId() {
         return referenceId;
+    }
+
+    public int getBeforeQuantityOnHand() {
+        return beforeQuantityOnHand;
+    }
+
+    public int getAfterQuantityOnHand() {
+        return afterQuantityOnHand;
+    }
+
+    public int getBeforeReservedQuantity() {
+        return beforeReservedQuantity;
+    }
+
+    public int getAfterReservedQuantity() {
+        return afterReservedQuantity;
+    }
+
+    public String getReason() {
+        return reason;
+    }
+
+    public String getOperatorId() {
+        return operatorId;
     }
 }
