@@ -1,0 +1,13 @@
+package com.ascmoda.cart.api.dto;
+
+public enum CartValidationIssueType {
+    PRODUCT_NOT_FOUND,
+    VARIANT_NOT_FOUND,
+    PRODUCT_INACTIVE,
+    VARIANT_INACTIVE,
+    INSUFFICIENT_STOCK,
+    PRICE_CHANGED,
+    SNAPSHOT_OUTDATED,
+    INVALID_QUANTITY,
+    EXTERNAL_SERVICE_UNAVAILABLE
+}

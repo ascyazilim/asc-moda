@@ -1,0 +1,28 @@
+package com.ascmoda.cart.api.dto;
+
+import com.ascmoda.cart.domain.model.CartStatus;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
+public record CartResponse(
+        UUID id,
+        UUID customerId,
+        CartStatus status,
+        String currency,
+        List<CartItemResponse> items,
+        int itemCount,
+        int totalQuantity,
+        BigDecimal totalAmount,
+        int selectedItemCount,
+        BigDecimal selectedTotal,
+        Long version,
+        Instant createdAt,
+        Instant updatedAt,
+        Instant lastActivityAt,
+        Instant checkedOutAt,
+        Instant abandonedAt
+) {
+}
