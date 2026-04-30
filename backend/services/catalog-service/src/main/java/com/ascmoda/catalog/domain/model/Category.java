@@ -5,8 +5,10 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import org.hibernate.annotations.BatchSize;
 
 @Entity
+@BatchSize(size = 50)
 @Table(
         name = "categories",
         uniqueConstraints = {

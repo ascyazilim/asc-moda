@@ -35,6 +35,9 @@ public record CreateProductRequest(
         UUID categoryId,
 
         @Valid
-        List<CreateProductVariantRequest> variants
+        List<CreateProductVariantRequest> variants,
+
+        @Valid
+        List<ProductImageRequest> images
 ) {
 }

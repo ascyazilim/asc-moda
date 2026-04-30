@@ -7,13 +7,16 @@ import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.BatchSize;
 
 @Entity
+@BatchSize(size = 50)
 @Table(
         name = "product_images",
         indexes = {
                 @Index(name = "idx_product_images_product_id", columnList = "product_id"),
-                @Index(name = "idx_product_images_variant_id", columnList = "variant_id")
+                @Index(name = "idx_product_images_variant_id", columnList = "variant_id"),
+                @Index(name = "idx_product_images_product_sort_order", columnList = "product_id, sort_order")
         }
 )
 public class ProductImage extends BaseAuditableEntity {
@@ -42,6 +45,16 @@ public class ProductImage extends BaseAuditableEntity {
     private boolean active = true;
 
     protected ProductImage() {
+    }
+
+    public ProductImage(ProductVariant variant, String imageUrl, String altText, int sortOrder,
+                        boolean main, boolean active) {
+        this.variant = variant;
+        this.imageUrl = imageUrl;
+        this.altText = altText;
+        this.sortOrder = sortOrder;
+        this.main = main;
+        this.active = active;
     }
 
     public Product getProduct() {

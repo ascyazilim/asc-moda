@@ -12,12 +12,14 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import org.hibernate.annotations.BatchSize;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
 @Entity
+@BatchSize(size = 50)
 @Table(
         name = "products",
         uniqueConstraints = {
@@ -54,9 +56,11 @@ public class Product extends BaseAuditableEntity {
     private Category category;
 
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL)
+    @BatchSize(size = 50)
     private List<ProductVariant> variants = new ArrayList<>();
 
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL)
+    @BatchSize(size = 50)
     private List<ProductImage> images = new ArrayList<>();
 
     protected Product() {
@@ -80,6 +84,15 @@ public class Product extends BaseAuditableEntity {
 
     public void deactivateVariants() {
         variants.forEach(variant -> variant.setActive(false));
+    }
+
+    public void addImage(ProductImage image) {
+        image.setProduct(this);
+        images.add(image);
+    }
+
+    public void deactivateImages() {
+        images.forEach(image -> image.setActive(false));
     }
 
     public String getName() {

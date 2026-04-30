@@ -17,6 +17,7 @@ public record ProductResponse(
         ProductStatus status,
         UUID categoryId,
         String categoryName,
+        String categorySlug,
         List<ProductVariantResponse> variants,
         List<ProductImageResponse> images,
         Long version,

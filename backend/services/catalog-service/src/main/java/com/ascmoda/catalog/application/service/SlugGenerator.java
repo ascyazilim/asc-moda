@@ -4,6 +4,7 @@ import org.springframework.stereotype.Component;
 
 import java.text.Normalizer;
 import java.util.Locale;
+import java.util.function.Predicate;
 
 @Component
 public class SlugGenerator {
@@ -20,5 +21,18 @@ public class SlugGenerator {
         }
 
         return normalized;
+    }
+
+    public String generateUnique(String baseSlug, Predicate<String> exists) {
+        String normalizedBase = generate(baseSlug);
+        String candidate = normalizedBase;
+        int suffix = 2;
+
+        while (exists.test(candidate)) {
+            candidate = normalizedBase + "-" + suffix;
+            suffix++;
+        }
+
+        return candidate;
     }
 }

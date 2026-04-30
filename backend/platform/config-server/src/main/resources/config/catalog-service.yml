@@ -1,6 +1,10 @@
 server:
   port: ${CATALOG_SERVICE_PORT:0}
 
+ascmoda:
+  catalog:
+    config-source: config-server
+
 spring:
   application:
     name: catalog-service
@@ -29,6 +33,9 @@ eureka:
     prefer-ip-address: true
 
 management:
+  info:
+    env:
+      enabled: true
   endpoints:
     web:
       exposure:
@@ -41,3 +48,8 @@ management:
 logging:
   level:
     com.ascmoda.catalog: INFO
+
+info:
+  ascmoda:
+    catalog:
+      config-source: ${ascmoda.catalog.config-source}

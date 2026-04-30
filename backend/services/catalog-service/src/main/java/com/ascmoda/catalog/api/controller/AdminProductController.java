@@ -8,6 +8,7 @@ import com.ascmoda.catalog.domain.model.ProductStatus;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -49,13 +50,26 @@ public class AdminProductController {
         return productService.changeStatus(id, status);
     }
 
+    @PatchMapping("/{id}/activate")
+    public ProductResponse activate(@PathVariable UUID id) {
+        return productService.activate(id);
+    }
+
+    @PatchMapping("/{id}/deactivate")
+    public ProductResponse deactivate(@PathVariable UUID id) {
+        return productService.deactivate(id);
+    }
+
     @GetMapping("/{id}")
     public ProductResponse getById(@PathVariable UUID id) {
         return productService.getAdminById(id);
     }
 
     @GetMapping
-    public Page<ProductResponse> list(@PageableDefault(size = 20) Pageable pageable) {
-        return productService.listAdmin(pageable);
+    public Page<ProductResponse> list(
+            @RequestParam(required = false) ProductStatus status,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
+    ) {
+        return productService.listAdmin(status, pageable);
     }
 }

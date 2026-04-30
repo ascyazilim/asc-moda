@@ -8,10 +8,12 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import org.hibernate.annotations.BatchSize;
 
 import java.math.BigDecimal;
 
 @Entity
+@BatchSize(size = 50)
 @Table(
         name = "product_variants",
         uniqueConstraints = {
