@@ -7,6 +7,8 @@ import com.ascmoda.catalog.api.dto.CreateProductVariantRequest;
 import com.ascmoda.catalog.api.dto.ProductResponse;
 import com.ascmoda.catalog.api.error.DuplicateResourceException;
 import com.ascmoda.catalog.domain.model.ProductStatus;
+import com.ascmoda.catalog.domain.repository.CatalogOutboxEventRepository;
+import com.ascmoda.shared.kernel.event.EventTypes;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -36,6 +38,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
         "eureka.client.register-with-eureka=false",
         "eureka.client.fetch-registry=false",
         "spring.jpa.open-in-view=false",
+        "ascmoda.catalog.outbox.enabled=false",
         "ascmoda.catalog.config-source=test"
 })
 @Testcontainers(disabledWithoutDocker = true)
@@ -50,6 +53,9 @@ class CatalogServiceIntegrationTest {
 
     @Autowired
     private ProductService productService;
+
+    @Autowired
+    private CatalogOutboxEventRepository catalogOutboxEventRepository;
 
     @DynamicPropertySource
     static void postgresProperties(DynamicPropertyRegistry registry) {
@@ -90,6 +96,36 @@ class CatalogServiceIntegrationTest {
         assertThat(product.slug()).isEqualTo("leather-sneaker");
         assertThat(product.categorySlug()).isEqualTo(category.slug());
         assertThat(product.variants()).hasSize(1);
+        assertThat(outboxCount(product.id(), EventTypes.CATALOG_PRODUCT_CREATED)).isEqualTo(1);
+    }
+
+    @Test
+    void recordsOutboxEventsForProductUpdateAndDeactivate() {
+        CategoryResponse category = categoryService.create(category("Outbox Products", null, true));
+        ProductResponse product = productService.create(product(
+                "Outbox Sneaker",
+                "outbox-sneaker",
+                "SKU-OUTBOX-1",
+                ProductStatus.ACTIVE,
+                category.id()
+        ));
+
+        productService.update(product.id(), new com.ascmoda.catalog.api.dto.UpdateProductRequest(
+                "Outbox Sneaker Updated",
+                "outbox-sneaker-updated",
+                "Updated long description",
+                "Updated short description",
+                BigDecimal.valueOf(1499, 2),
+                ProductStatus.ACTIVE,
+                category.id(),
+                null,
+                null
+        ));
+        productService.deactivate(product.id());
+
+        assertThat(outboxCount(product.id(), EventTypes.CATALOG_PRODUCT_CREATED)).isEqualTo(1);
+        assertThat(outboxCount(product.id(), EventTypes.CATALOG_PRODUCT_UPDATED)).isEqualTo(1);
+        assertThat(outboxCount(product.id(), EventTypes.CATALOG_PRODUCT_DEACTIVATED)).isEqualTo(1);
     }
 
     @Test
@@ -186,5 +222,9 @@ class CatalogServiceIntegrationTest {
                 List.of(new CreateProductVariantRequest(null, sku, "Black", "M", null, null, true)),
                 List.of()
         );
+    }
+
+    private long outboxCount(java.util.UUID productId, String eventType) {
+        return catalogOutboxEventRepository.countByAggregateIdAndEventType(productId.toString(), eventType);
     }
 }

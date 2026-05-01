@@ -53,16 +53,19 @@ public class ProductService {
     private final ProductVariantMapper productVariantMapper;
     private final ProductImageMapper productImageMapper;
     private final SlugGenerator slugGenerator;
+    private final CatalogOutboxService catalogOutboxService;
 
     public ProductService(ProductRepository productRepository, ProductVariantRepository productVariantRepository,
                           CategoryRepository categoryRepository, ProductVariantMapper productVariantMapper,
-                          ProductImageMapper productImageMapper, SlugGenerator slugGenerator) {
+                          ProductImageMapper productImageMapper, SlugGenerator slugGenerator,
+                          CatalogOutboxService catalogOutboxService) {
         this.productRepository = productRepository;
         this.productVariantRepository = productVariantRepository;
         this.categoryRepository = categoryRepository;
         this.productVariantMapper = productVariantMapper;
         this.productImageMapper = productImageMapper;
         this.slugGenerator = slugGenerator;
+        this.catalogOutboxService = catalogOutboxService;
     }
 
     @Transactional
@@ -85,7 +88,8 @@ public class ProductService {
         syncImages(product, request.images());
         validateImages(product);
 
-        Product saved = productRepository.save(product);
+        Product saved = productRepository.saveAndFlush(product);
+        catalogOutboxService.recordProductCreated(saved);
         log.info("Created catalog product id={} slug={}", saved.getId(), saved.getSlug());
         return toAdminResponse(saved);
     }
@@ -114,7 +118,12 @@ public class ProductService {
             validateImages(product);
         }
 
-        Product saved = productRepository.save(product);
+        Product saved = productRepository.saveAndFlush(product);
+        if (saved.getStatus() == ProductStatus.INACTIVE) {
+            catalogOutboxService.recordProductDeactivated(saved);
+        } else {
+            catalogOutboxService.recordProductUpdated(saved);
+        }
         log.info("Updated catalog product id={} slug={}", saved.getId(), saved.getSlug());
         return toAdminResponse(saved);
     }
@@ -127,7 +136,12 @@ public class ProductService {
         }
         product.setStatus(status);
 
-        Product saved = productRepository.save(product);
+        Product saved = productRepository.saveAndFlush(product);
+        if (saved.getStatus() == ProductStatus.INACTIVE) {
+            catalogOutboxService.recordProductDeactivated(saved);
+        } else {
+            catalogOutboxService.recordProductUpdated(saved);
+        }
         log.info("Changed catalog product id={} status={}", saved.getId(), saved.getStatus());
         return toAdminResponse(saved);
     }
