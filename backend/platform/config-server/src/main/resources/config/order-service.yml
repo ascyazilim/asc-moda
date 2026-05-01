@@ -5,6 +5,11 @@ ascmoda:
   order:
     config-source: config-server
     reservation-ttl-minutes: ${ORDER_RESERVATION_TTL_MINUTES:30}
+    outbox:
+      enabled: ${ORDER_OUTBOX_ENABLED:true}
+      batch-size: ${ORDER_OUTBOX_BATCH_SIZE:25}
+      max-retries: ${ORDER_OUTBOX_MAX_RETRIES:5}
+      publish-delay-ms: ${ORDER_OUTBOX_PUBLISH_DELAY_MS:5000}
 
 spring:
   application:
@@ -35,6 +40,11 @@ spring:
     properties:
       hibernate:
         format_sql: false
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:asc_moda}
+    password: ${RABBITMQ_PASSWORD:asc_moda}
 
 eureka:
   client:

@@ -68,16 +68,19 @@ public class OrderService {
     private final CartClient cartClient;
     private final InventoryClient inventoryClient;
     private final OrderNumberGenerator orderNumberGenerator;
+    private final OrderOutboxService orderOutboxService;
     private final long reservationTtlMinutes;
 
     public OrderService(OrderRepository orderRepository, OrderMapper orderMapper, CartClient cartClient,
                         InventoryClient inventoryClient, OrderNumberGenerator orderNumberGenerator,
+                        OrderOutboxService orderOutboxService,
                         @Value("${ascmoda.order.reservation-ttl-minutes:30}") long reservationTtlMinutes) {
         this.orderRepository = orderRepository;
         this.orderMapper = orderMapper;
         this.cartClient = cartClient;
         this.inventoryClient = inventoryClient;
         this.orderNumberGenerator = orderNumberGenerator;
+        this.orderOutboxService = orderOutboxService;
         this.reservationTtlMinutes = reservationTtlMinutes;
     }
 
@@ -111,6 +114,7 @@ public class OrderService {
 
             Order order = buildOrder(request, preview, orderNumber, reservations);
             Order saved = orderRepository.saveAndFlush(order);
+            orderOutboxService.recordOrderCreated(saved);
             markCartCheckedOut(request.customerId());
 
             log.info("Created order id={} orderNumber={} customerId={} cartId={}",
@@ -166,6 +170,7 @@ public class OrderService {
         }
 
         order.confirm();
+        orderOutboxService.recordOrderConfirmed(order);
         log.info("Confirmed order id={} orderNumber={}", order.getId(), order.getOrderNumber());
         return orderMapper.toResponse(order);
     }
@@ -190,6 +195,7 @@ public class OrderService {
         }
 
         order.cancel(request.reason());
+        orderOutboxService.recordOrderCancelled(order);
         log.info("Cancelled order id={} orderNumber={}", order.getId(), order.getOrderNumber());
         return orderMapper.toResponse(order);
     }

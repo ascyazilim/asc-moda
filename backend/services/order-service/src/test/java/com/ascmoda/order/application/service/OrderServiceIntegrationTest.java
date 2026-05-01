@@ -17,6 +17,7 @@ import com.ascmoda.order.domain.exception.InvalidOrderStateException;
 import com.ascmoda.order.domain.model.OrderReservationStatus;
 import com.ascmoda.order.domain.model.OrderSource;
 import com.ascmoda.order.domain.model.OrderStatus;
+import com.ascmoda.order.domain.repository.OutboxEventRepository;
 import com.ascmoda.order.domain.repository.OrderRepository;
 import com.ascmoda.order.infrastructure.cart.CartClient;
 import com.ascmoda.order.infrastructure.cart.CartItemResponse;
@@ -31,6 +32,7 @@ import com.ascmoda.order.infrastructure.inventory.ReleaseStockRequest;
 import com.ascmoda.order.infrastructure.inventory.ReserveStockRequest;
 import com.ascmoda.order.infrastructure.inventory.StockReservationResponse;
 import com.ascmoda.order.infrastructure.inventory.StockReservationStatus;
+import com.ascmoda.shared.kernel.event.EventTypes;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -70,7 +72,8 @@ import static org.mockito.Mockito.when;
         "eureka.client.fetch-registry=false",
         "spring.jpa.open-in-view=false",
         "ascmoda.order.config-source=test",
-        "ascmoda.order.reservation-ttl-minutes=30"
+        "ascmoda.order.reservation-ttl-minutes=30",
+        "ascmoda.order.outbox.enabled=false"
 })
 @Testcontainers(disabledWithoutDocker = true)
 class OrderServiceIntegrationTest {
@@ -83,6 +86,9 @@ class OrderServiceIntegrationTest {
 
     @Autowired
     private OrderRepository orderRepository;
+
+    @Autowired
+    private OutboxEventRepository outboxEventRepository;
 
     @MockitoBean
     private CartClient cartClient;
@@ -104,6 +110,7 @@ class OrderServiceIntegrationTest {
 
     @BeforeEach
     void cleanDatabase() {
+        outboxEventRepository.deleteAll();
         orderRepository.deleteAll();
         reset(cartClient, inventoryClient, orderNumberGenerator);
         when(orderNumberGenerator.generate()).thenAnswer(invocation ->
@@ -137,6 +144,8 @@ class OrderServiceIntegrationTest {
         assertThat(order.items().get(0).productNameSnapshot()).isEqualTo("Cotton Shirt");
         assertThat(order.items().get(0).lineTotal()).isEqualByComparingTo("39.98");
         assertThat(order.items().get(0).reservationStatus()).isEqualTo(OrderReservationStatus.ACTIVE);
+        assertThat(outboxEventRepository.countByAggregateIdAndEventType(order.id().toString(), EventTypes.ORDER_CREATED))
+                .isEqualTo(1);
         verify(inventoryClient).reserve(any(ReserveStockRequest.class));
         verify(cartClient).markCheckedOut(customerId);
     }
@@ -235,6 +244,8 @@ class OrderServiceIntegrationTest {
 
         assertThat(second.id()).isEqualTo(first.id());
         assertThat(second.orderNumber()).isEqualTo(first.orderNumber());
+        assertThat(outboxEventRepository.countByAggregateIdAndEventType(first.id().toString(), EventTypes.ORDER_CREATED))
+                .isEqualTo(1);
         verify(cartClient, never()).getCheckoutPreview(any(UUID.class));
         verify(inventoryClient, never()).reserve(any(ReserveStockRequest.class));
         verify(cartClient, never()).markCheckedOut(any(UUID.class));
@@ -253,6 +264,8 @@ class OrderServiceIntegrationTest {
         OrderResponse second = orderService.createOrder(createRequest(customerId, null, null));
 
         assertThat(second.id()).isEqualTo(first.id());
+        assertThat(outboxEventRepository.countByAggregateIdAndEventType(first.id().toString(), EventTypes.ORDER_CREATED))
+                .isEqualTo(1);
         verify(cartClient).getCheckoutPreview(customerId);
         verify(inventoryClient, never()).reserve(any(ReserveStockRequest.class));
         verify(cartClient, never()).markCheckedOut(any(UUID.class));
@@ -268,6 +281,8 @@ class OrderServiceIntegrationTest {
         assertThat(confirmed.status()).isEqualTo(OrderStatus.CONFIRMED);
         assertThat(confirmed.confirmedAt()).isNotNull();
         assertThat(confirmed.items().get(0).reservationStatus()).isEqualTo(OrderReservationStatus.CONSUMED);
+        assertThat(outboxEventRepository.countByAggregateIdAndEventType(created.id().toString(), EventTypes.ORDER_CONFIRMED))
+                .isEqualTo(1);
         ArgumentCaptor<ConsumeStockReservationRequest> captor = ArgumentCaptor.forClass(ConsumeStockReservationRequest.class);
         verify(inventoryClient).consume(captor.capture());
         assertThat(captor.getValue().reservationKey()).isEqualTo(created.items().get(0).reservationKey());
@@ -311,6 +326,8 @@ class OrderServiceIntegrationTest {
         assertThat(cancelled.cancelledAt()).isNotNull();
         assertThat(cancelled.cancellationReason()).isEqualTo("Customer requested cancellation");
         assertThat(cancelled.items().get(0).reservationStatus()).isEqualTo(OrderReservationStatus.RELEASED);
+        assertThat(outboxEventRepository.countByAggregateIdAndEventType(created.id().toString(), EventTypes.ORDER_CANCELLED))
+                .isEqualTo(1);
         verify(inventoryClient).release(any(ReleaseStockRequest.class));
     }
 
