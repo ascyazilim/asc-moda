@@ -13,6 +13,9 @@ public record OrderResponse(
         String orderNumber,
         UUID sourceCartId,
         UUID customerId,
+        String idempotencyKey,
+        String externalReference,
+        String paymentReference,
         OrderStatus status,
         String currency,
         BigDecimal subtotalAmount,
@@ -28,6 +31,7 @@ public record OrderResponse(
         Instant confirmedAt,
         Instant cancelledAt,
         String cancellationReason,
+        String failureReason,
         Long version,
         Instant createdAt,
         Instant updatedAt

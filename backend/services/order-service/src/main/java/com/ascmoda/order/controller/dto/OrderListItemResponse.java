@@ -12,6 +12,8 @@ public record OrderListItemResponse(
         String orderNumber,
         UUID sourceCartId,
         UUID customerId,
+        String externalReference,
+        String paymentReference,
         OrderStatus status,
         OrderSource source,
         String currency,

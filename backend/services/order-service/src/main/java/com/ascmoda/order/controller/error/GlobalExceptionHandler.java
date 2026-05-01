@@ -3,7 +3,10 @@ package com.ascmoda.order.controller.error;
 import com.ascmoda.order.domain.exception.CartNotReadyException;
 import com.ascmoda.order.domain.exception.CheckoutPreviewInvalidException;
 import com.ascmoda.order.domain.exception.DuplicateOrderAttemptException;
+import com.ascmoda.order.domain.exception.EmptyCheckoutSelectionException;
 import com.ascmoda.order.domain.exception.ExternalServiceUnavailableException;
+import com.ascmoda.order.domain.exception.InventoryConsumeFailedException;
+import com.ascmoda.order.domain.exception.InventoryReleaseFailedException;
 import com.ascmoda.order.domain.exception.InventoryReservationFailedException;
 import com.ascmoda.order.domain.exception.InvalidOrderStateException;
 import com.ascmoda.order.domain.exception.OrderNotFoundException;
@@ -39,6 +42,9 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({
             CartNotReadyException.class,
             CheckoutPreviewInvalidException.class,
+            EmptyCheckoutSelectionException.class,
+            InventoryConsumeFailedException.class,
+            InventoryReleaseFailedException.class,
             InventoryReservationFailedException.class,
             InvalidOrderStateException.class,
             IllegalStateException.class
@@ -95,10 +101,37 @@ public class GlobalExceptionHandler {
         problem.setTitle(status.getReasonPhrase());
         problem.setInstance(URI.create(request.getRequestURI()));
         problem.setProperty("timestamp", Instant.now());
+        problem.setProperty("errorCode", errorCode(message, status));
         if (!fieldErrors.isEmpty()) {
             problem.setProperty("fieldErrors", fieldErrors);
         }
         return ResponseEntity.status(status).body(problem);
+    }
+
+    private String errorCode(String message, HttpStatus status) {
+        String normalized = message == null ? "" : message.toLowerCase();
+        if (status == HttpStatus.SERVICE_UNAVAILABLE) {
+            return "EXTERNAL_SERVICE_UNAVAILABLE";
+        }
+        if (normalized.contains("not found")) {
+            return "ORDER_NOT_FOUND";
+        }
+        if (normalized.contains("idempotency") || normalized.contains("already exists")) {
+            return "DUPLICATE_ORDER_ATTEMPT";
+        }
+        if (normalized.contains("checkout")) {
+            return "CHECKOUT_NOT_READY";
+        }
+        if (normalized.contains("reservation")) {
+            return "INVENTORY_RESERVATION_ERROR";
+        }
+        if (normalized.contains("concurrently")) {
+            return "ORDER_CONFLICT";
+        }
+        if (status == HttpStatus.BAD_REQUEST) {
+            return "VALIDATION_ERROR";
+        }
+        return "ORDER_BUSINESS_ERROR";
     }
 
     private String dataIntegrityMessage(DataIntegrityViolationException ex) {
@@ -110,6 +143,12 @@ public class GlobalExceptionHandler {
         }
         if (normalizedMessage.contains("uk_orders_source_cart_id")) {
             return "Order already exists for cart";
+        }
+        if (normalizedMessage.contains("ux_orders_customer_idempotency")) {
+            return "Order already exists for idempotency key";
+        }
+        if (normalizedMessage.contains("uk_orders_external_reference")) {
+            return "Order external reference already exists";
         }
         if (normalizedMessage.contains("ck_orders_amounts")) {
             return "Order amounts are not consistent";

@@ -20,12 +20,18 @@ public interface OrderRepository extends JpaRepository<Order, UUID>, JpaSpecific
     @EntityGraph(attributePaths = "items")
     Optional<Order> findWithItemsByIdAndCustomerId(UUID id, UUID customerId);
 
-    Optional<Order> findBySourceCartId(UUID sourceCartId);
+    @EntityGraph(attributePaths = "items")
+    Optional<Order> findWithItemsBySourceCartId(UUID sourceCartId);
+
+    @EntityGraph(attributePaths = "items")
+    Optional<Order> findWithItemsByCustomerIdAndIdempotencyKey(UUID customerId, String idempotencyKey);
 
     boolean existsByOrderNumber(String orderNumber);
 
+    @EntityGraph(attributePaths = "items")
     Page<Order> findByCustomerId(UUID customerId, Pageable pageable);
 
     @Override
+    @EntityGraph(attributePaths = "items")
     Page<Order> findAll(@Nullable Specification<Order> specification, Pageable pageable);
 }

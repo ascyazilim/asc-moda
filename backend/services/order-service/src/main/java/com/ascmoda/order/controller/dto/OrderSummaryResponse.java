@@ -10,6 +10,7 @@ public record OrderSummaryResponse(
         UUID id,
         String orderNumber,
         UUID customerId,
+        String externalReference,
         OrderStatus status,
         String currency,
         BigDecimal totalAmount,

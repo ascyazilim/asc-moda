@@ -75,6 +75,12 @@ resilience4j:
         minimum-number-of-calls: 5
         failure-rate-threshold: 50
         wait-duration-in-open-state: 10s
+  timelimiter:
+    instances:
+      cart-service:
+        timeout-duration: 4s
+      inventory-service:
+        timeout-duration: 4s
 
 info:
   ascmoda:

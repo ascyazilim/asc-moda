@@ -32,7 +32,10 @@ import java.util.UUID;
                 @Index(name = "idx_orders_customer_id", columnList = "customer_id"),
                 @Index(name = "idx_orders_status", columnList = "status"),
                 @Index(name = "idx_orders_created_at", columnList = "created_at"),
-                @Index(name = "idx_orders_order_number", columnList = "order_number")
+                @Index(name = "idx_orders_order_number", columnList = "order_number"),
+                @Index(name = "idx_orders_idempotency_key", columnList = "idempotency_key"),
+                @Index(name = "idx_orders_payment_reference", columnList = "payment_reference"),
+                @Index(name = "idx_orders_total_amount", columnList = "total_amount")
         }
 )
 public class Order extends BaseAuditableEntity {
@@ -45,6 +48,15 @@ public class Order extends BaseAuditableEntity {
 
     @Column(name = "customer_id", nullable = false)
     private UUID customerId;
+
+    @Column(name = "idempotency_key", length = 160)
+    private String idempotencyKey;
+
+    @Column(name = "external_reference", length = 160)
+    private String externalReference;
+
+    @Column(name = "payment_reference", length = 160)
+    private String paymentReference;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
@@ -90,6 +102,9 @@ public class Order extends BaseAuditableEntity {
     @Column(name = "cancellation_reason", length = 500)
     private String cancellationReason;
 
+    @Column(name = "failure_reason", length = 500)
+    private String failureReason;
+
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     @BatchSize(size = 50)
     private List<OrderItem> items = new ArrayList<>();
@@ -98,10 +113,13 @@ public class Order extends BaseAuditableEntity {
     }
 
     public Order(String orderNumber, UUID sourceCartId, UUID customerId, String currency, String note,
-                 OrderSource source, AddressSnapshot shippingAddress, CustomerSnapshot customerSnapshot) {
+                 OrderSource source, AddressSnapshot shippingAddress, CustomerSnapshot customerSnapshot,
+                 String idempotencyKey, String externalReference) {
         this.orderNumber = requireText(orderNumber, "Order number must be provided");
         this.sourceCartId = requireUuid(sourceCartId, "Source cart id must be provided");
         this.customerId = requireUuid(customerId, "Customer id must be provided");
+        this.idempotencyKey = normalizeOptional(idempotencyKey);
+        this.externalReference = normalizeOptional(externalReference);
         this.currency = currency == null || currency.isBlank() ? "TRY" : currency.trim().toUpperCase();
         this.note = normalizeOptional(note);
         this.source = source == null ? OrderSource.WEB : source;
@@ -134,7 +152,7 @@ public class Order extends BaseAuditableEntity {
     public void markFailed(String reason) {
         ensurePending("Only pending orders can be marked as failed");
         status = OrderStatus.FAILED;
-        cancellationReason = normalizeOptional(reason);
+        failureReason = normalizeOptional(reason);
     }
 
     public void ensurePending(String message) {
@@ -178,6 +196,18 @@ public class Order extends BaseAuditableEntity {
 
     public UUID getCustomerId() {
         return customerId;
+    }
+
+    public String getIdempotencyKey() {
+        return idempotencyKey;
+    }
+
+    public String getExternalReference() {
+        return externalReference;
+    }
+
+    public String getPaymentReference() {
+        return paymentReference;
     }
 
     public OrderStatus getStatus() {
@@ -234,6 +264,10 @@ public class Order extends BaseAuditableEntity {
 
     public String getCancellationReason() {
         return cancellationReason;
+    }
+
+    public String getFailureReason() {
+        return failureReason;
     }
 
     public List<OrderItem> getItems() {

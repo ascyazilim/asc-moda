@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
+import java.math.BigDecimal;
 import java.util.UUID;
 
 @RestController
@@ -39,9 +40,11 @@ public class AdminOrderController {
             @RequestParam(required = false) String orderNumber,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant createdFrom,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant createdTo,
+            @RequestParam(required = false) BigDecimal totalMin,
+            @RequestParam(required = false) BigDecimal totalMax,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
-        return orderService.listAdmin(status, customerId, orderNumber, createdFrom, createdTo, pageable);
+        return orderService.listAdmin(status, customerId, orderNumber, createdFrom, createdTo, totalMin, totalMax, pageable);
     }
 
     @GetMapping("/{orderId}")

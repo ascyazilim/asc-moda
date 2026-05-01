@@ -9,8 +9,10 @@ import com.ascmoda.order.controller.dto.OrderSummaryResponse;
 import com.ascmoda.order.controller.dto.PageResponse;
 import com.ascmoda.order.domain.exception.CartNotReadyException;
 import com.ascmoda.order.domain.exception.CheckoutPreviewInvalidException;
-import com.ascmoda.order.domain.exception.DuplicateOrderAttemptException;
+import com.ascmoda.order.domain.exception.EmptyCheckoutSelectionException;
 import com.ascmoda.order.domain.exception.ExternalServiceUnavailableException;
+import com.ascmoda.order.domain.exception.InventoryConsumeFailedException;
+import com.ascmoda.order.domain.exception.InventoryReleaseFailedException;
 import com.ascmoda.order.domain.exception.InventoryReservationFailedException;
 import com.ascmoda.order.domain.exception.InvalidOrderStateException;
 import com.ascmoda.order.domain.exception.OrderNotFoundException;
@@ -50,6 +52,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -80,9 +83,23 @@ public class OrderService {
 
     @Transactional
     public OrderResponse createOrder(CreateOrderRequest request) {
+        Optional<Order> existingForIdempotencyKey = findExistingOrderForIdempotencyKey(request);
+        if (existingForIdempotencyKey.isPresent()) {
+            Order existing = existingForIdempotencyKey.get();
+            log.info("Returned existing order for idempotencyKey customerId={} orderId={} orderNumber={}",
+                    request.customerId(), existing.getId(), existing.getOrderNumber());
+            return orderMapper.toResponse(existing);
+        }
+
         CheckoutPreviewResponse preview = fetchCheckoutPreview(request.customerId());
         validateCheckoutPreview(request, preview);
-        ensureNoOrderForCart(preview.cartId());
+        Optional<Order> existingForCart = orderRepository.findWithItemsBySourceCartId(preview.cartId());
+        if (existingForCart.isPresent()) {
+            Order existing = existingForCart.get();
+            log.info("Returned existing order for sourceCartId={} orderId={} orderNumber={}",
+                    preview.cartId(), existing.getId(), existing.getOrderNumber());
+            return orderMapper.toResponse(existing);
+        }
 
         String orderNumber = nextOrderNumber();
         List<StockReservationResponse> reservations = new ArrayList<>();
@@ -100,6 +117,8 @@ public class OrderService {
                     saved.getId(), saved.getOrderNumber(), saved.getCustomerId(), saved.getSourceCartId());
             return orderMapper.toResponse(saved);
         } catch (RuntimeException ex) {
+            log.info("Order creation failed after {} reservation(s), releasing reserved stock orderNumber={}",
+                    reservations.size(), orderNumber);
             releaseReservationsAfterCreateFailure(reservations, orderNumber);
             throw ex;
         }
@@ -119,16 +138,22 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public PageResponse<OrderListItemResponse> listAdmin(OrderStatus status, UUID customerId, String orderNumber,
-                                                         Instant createdFrom, Instant createdTo, Pageable pageable) {
+                                                         Instant createdFrom, Instant createdTo,
+                                                         BigDecimal totalMin, BigDecimal totalMax, Pageable pageable) {
+        validateTotalRange(totalMin, totalMax);
         Page<OrderListItemResponse> page = orderRepository.findAll(
-                        adminSpecification(status, customerId, orderNumber, createdFrom, createdTo),
+                        adminSpecification(status, customerId, orderNumber, createdFrom, createdTo, totalMin, totalMax),
                         pageable
                 )
                 .map(orderMapper::toListItemResponse);
         return orderMapper.toPageResponse(page);
     }
 
-    @Transactional(noRollbackFor = {ExternalServiceUnavailableException.class, InventoryReservationFailedException.class})
+    @Transactional(noRollbackFor = {
+            ExternalServiceUnavailableException.class,
+            InventoryConsumeFailedException.class,
+            InventoryReservationFailedException.class
+    })
     public OrderResponse confirm(UUID orderId) {
         Order order = getOrderWithItems(orderId);
         order.ensurePending("Only pending orders can be confirmed");
@@ -145,7 +170,11 @@ public class OrderService {
         return orderMapper.toResponse(order);
     }
 
-    @Transactional(noRollbackFor = {ExternalServiceUnavailableException.class, InventoryReservationFailedException.class})
+    @Transactional(noRollbackFor = {
+            ExternalServiceUnavailableException.class,
+            InventoryReleaseFailedException.class,
+            InventoryReservationFailedException.class
+    })
     public OrderResponse cancel(UUID orderId, CancelOrderRequest request) {
         Order order = getOrderWithItems(orderId);
         order.ensurePending("Only pending orders can be cancelled");
@@ -195,7 +224,7 @@ public class OrderService {
             throw new CheckoutPreviewInvalidException("Checkout preview customer does not match request customer");
         }
         if (preview.selectedItems() == null || preview.selectedItems().isEmpty()) {
-            throw new CartNotReadyException("Checkout requires at least one selected cart item");
+            throw new EmptyCheckoutSelectionException("Checkout requires at least one selected cart item");
         }
         if (preview.selectedTotal() == null) {
             throw new CheckoutPreviewInvalidException("Checkout selected total is not valid");
@@ -253,10 +282,12 @@ public class OrderService {
                 .collect(Collectors.joining("; "));
     }
 
-    private void ensureNoOrderForCart(UUID cartId) {
-        orderRepository.findBySourceCartId(cartId).ifPresent(order -> {
-            throw new DuplicateOrderAttemptException("Order already exists for cart: " + cartId);
-        });
+    private Optional<Order> findExistingOrderForIdempotencyKey(CreateOrderRequest request) {
+        String idempotencyKey = normalizeOptional(request.idempotencyKey());
+        if (idempotencyKey == null) {
+            return Optional.empty();
+        }
+        return orderRepository.findWithItemsByCustomerIdAndIdempotencyKey(request.customerId(), idempotencyKey);
     }
 
     private String nextOrderNumber() {
@@ -315,7 +346,9 @@ public class OrderService {
                 request.note(),
                 resolveSource(request.source()),
                 shippingAddress,
-                customerSnapshot
+                customerSnapshot,
+                normalizeOptional(request.idempotencyKey()),
+                normalizeOptional(request.externalReference())
         );
 
         for (CartItemResponse item : preview.selectedItems()) {
@@ -397,13 +430,13 @@ public class OrderService {
                     "Order confirmation"
             ));
         } catch (FeignException.UnprocessableEntity ex) {
-            throw new InventoryReservationFailedException("Inventory reservation cannot be consumed for SKU: " + item.getSku());
+            throw new InventoryConsumeFailedException("Inventory reservation cannot be consumed for SKU: " + item.getSku());
         } catch (FeignException.NotFound ex) {
-            throw new InventoryReservationFailedException("Inventory reservation was not found for SKU: " + item.getSku());
+            throw new InventoryConsumeFailedException("Inventory reservation was not found for SKU: " + item.getSku());
         } catch (FeignException ex) {
             throw new ExternalServiceUnavailableException("Inventory service is unavailable");
         } catch (RuntimeException ex) {
-            if (ex instanceof InventoryReservationFailedException || ex instanceof ExternalServiceUnavailableException) {
+            if (ex instanceof InventoryConsumeFailedException || ex instanceof ExternalServiceUnavailableException) {
                 throw ex;
             }
             throw new ExternalServiceUnavailableException("Inventory service is unavailable");
@@ -424,13 +457,13 @@ public class OrderService {
                     order.getOrderNumber()
             ));
         } catch (FeignException.UnprocessableEntity ex) {
-            throw new InventoryReservationFailedException("Inventory reservation cannot be released for SKU: " + item.getSku());
+            throw new InventoryReleaseFailedException("Inventory reservation cannot be released for SKU: " + item.getSku());
         } catch (FeignException.NotFound ex) {
-            throw new InventoryReservationFailedException("Inventory reservation was not found for SKU: " + item.getSku());
+            throw new InventoryReleaseFailedException("Inventory reservation was not found for SKU: " + item.getSku());
         } catch (FeignException ex) {
             throw new ExternalServiceUnavailableException("Inventory service is unavailable");
         } catch (RuntimeException ex) {
-            if (ex instanceof InventoryReservationFailedException || ex instanceof ExternalServiceUnavailableException) {
+            if (ex instanceof InventoryReleaseFailedException || ex instanceof ExternalServiceUnavailableException) {
                 throw ex;
             }
             throw new ExternalServiceUnavailableException("Inventory service is unavailable");
@@ -438,7 +471,8 @@ public class OrderService {
     }
 
     private Specification<Order> adminSpecification(OrderStatus status, UUID customerId, String orderNumber,
-                                                    Instant createdFrom, Instant createdTo) {
+                                                    Instant createdFrom, Instant createdTo,
+                                                    BigDecimal totalMin, BigDecimal totalMax) {
         Specification<Order> specification = (root, query, criteriaBuilder) -> criteriaBuilder.conjunction();
         if (status != null) {
             specification = specification.and((root, query, criteriaBuilder) ->
@@ -461,7 +495,27 @@ public class OrderService {
             specification = specification.and((root, query, criteriaBuilder) ->
                     criteriaBuilder.lessThanOrEqualTo(root.get("createdAt"), createdTo));
         }
+        if (totalMin != null) {
+            specification = specification.and((root, query, criteriaBuilder) ->
+                    criteriaBuilder.greaterThanOrEqualTo(root.get("totalAmount"), totalMin));
+        }
+        if (totalMax != null) {
+            specification = specification.and((root, query, criteriaBuilder) ->
+                    criteriaBuilder.lessThanOrEqualTo(root.get("totalAmount"), totalMax));
+        }
         return specification;
+    }
+
+    private void validateTotalRange(BigDecimal totalMin, BigDecimal totalMax) {
+        if (totalMin != null && totalMin.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("totalMin cannot be negative");
+        }
+        if (totalMax != null && totalMax.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("totalMax cannot be negative");
+        }
+        if (totalMin != null && totalMax != null && totalMin.compareTo(totalMax) > 0) {
+            throw new IllegalArgumentException("totalMin cannot be greater than totalMax");
+        }
     }
 
     private String reservationKey(String orderNumber, CartItemResponse item) {
@@ -474,5 +528,9 @@ public class OrderService {
 
     private String normalizeSearch(String value) {
         return value == null || value.isBlank() ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeOptional(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 }

@@ -18,6 +18,12 @@ public record CreateOrderRequest(
         @Size(max = 1000)
         String note,
 
-        OrderSource source
+        OrderSource source,
+
+        @Size(max = 160)
+        String idempotencyKey,
+
+        @Size(max = 160)
+        String externalReference
 ) {
 }

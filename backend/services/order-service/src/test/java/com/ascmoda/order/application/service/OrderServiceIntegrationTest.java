@@ -8,7 +8,10 @@ import com.ascmoda.order.controller.dto.OrderResponse;
 import com.ascmoda.order.controller.dto.OrderSummaryResponse;
 import com.ascmoda.order.controller.dto.PageResponse;
 import com.ascmoda.order.domain.exception.CheckoutPreviewInvalidException;
+import com.ascmoda.order.domain.exception.EmptyCheckoutSelectionException;
 import com.ascmoda.order.domain.exception.ExternalServiceUnavailableException;
+import com.ascmoda.order.domain.exception.InventoryConsumeFailedException;
+import com.ascmoda.order.domain.exception.InventoryReleaseFailedException;
 import com.ascmoda.order.domain.exception.InventoryReservationFailedException;
 import com.ascmoda.order.domain.exception.InvalidOrderStateException;
 import com.ascmoda.order.domain.model.OrderReservationStatus;
@@ -33,6 +36,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -86,6 +90,9 @@ class OrderServiceIntegrationTest {
     @MockitoBean
     private InventoryClient inventoryClient;
 
+    @MockitoBean
+    private OrderNumberGenerator orderNumberGenerator;
+
     @DynamicPropertySource
     static void postgresProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
@@ -98,7 +105,9 @@ class OrderServiceIntegrationTest {
     @BeforeEach
     void cleanDatabase() {
         orderRepository.deleteAll();
-        reset(cartClient, inventoryClient);
+        reset(cartClient, inventoryClient, orderNumberGenerator);
+        when(orderNumberGenerator.generate()).thenAnswer(invocation ->
+                "ORD-TEST-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
         when(inventoryClient.reserve(any(ReserveStockRequest.class))).thenAnswer(invocation -> {
             ReserveStockRequest request = invocation.getArgument(0);
             return reservationResponse(request.productVariantId(), request.sku(), request.quantity(), request.reservationKey());
@@ -120,6 +129,9 @@ class OrderServiceIntegrationTest {
         assertThat(order.customerId()).isEqualTo(customerId);
         assertThat(order.sourceCartId()).isEqualTo(cartId);
         assertThat(order.currency()).isEqualTo("TRY");
+        assertThat(order.idempotencyKey()).isEqualTo("checkout-" + customerId);
+        assertThat(order.externalReference()).isEqualTo("web-" + customerId);
+        assertThat(order.paymentReference()).isNull();
         assertThat(order.totalAmount()).isEqualByComparingTo("39.98");
         assertThat(order.items()).hasSize(1);
         assertThat(order.items().get(0).productNameSnapshot()).isEqualTo("Cotton Shirt");
@@ -138,6 +150,20 @@ class OrderServiceIntegrationTest {
 
         assertThatThrownBy(() -> orderService.createOrder(createRequest(customerId)))
                 .isInstanceOf(CheckoutPreviewInvalidException.class);
+
+        assertThat(orderRepository.count()).isZero();
+        verify(inventoryClient, never()).reserve(any(ReserveStockRequest.class));
+        verify(cartClient, never()).markCheckedOut(any(UUID.class));
+    }
+
+    @Test
+    void rejectsEmptyCheckoutSelectionWithoutReservation() {
+        UUID customerId = UUID.randomUUID();
+        UUID cartId = UUID.randomUUID();
+        when(cartClient.getCheckoutPreview(customerId)).thenReturn(validPreview(cartId, customerId, List.of()));
+
+        assertThatThrownBy(() -> orderService.createOrder(createRequest(customerId)))
+                .isInstanceOf(EmptyCheckoutSelectionException.class);
 
         assertThat(orderRepository.count()).isZero();
         verify(inventoryClient, never()).reserve(any(ReserveStockRequest.class));
@@ -176,6 +202,63 @@ class OrderServiceIntegrationTest {
     }
 
     @Test
+    void releasesReservationWhenPersistFailsAfterReserve() {
+        UUID customerId = UUID.randomUUID();
+        UUID cartId = UUID.randomUUID();
+        CartItemResponse item = cartItem(
+                "SKU-PERSIST-FAIL",
+                1,
+                BigDecimal.TEN,
+                "X".repeat(221)
+        );
+        when(cartClient.getCheckoutPreview(customerId)).thenReturn(validPreview(cartId, customerId, List.of(item)));
+
+        assertThatThrownBy(() -> orderService.createOrder(createRequest(customerId)))
+                .isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThat(orderRepository.count()).isZero();
+        verify(inventoryClient).release(any(ReleaseStockRequest.class));
+        verify(cartClient, never()).markCheckedOut(any(UUID.class));
+    }
+
+    @Test
+    void duplicateCreateWithIdempotencyKeyReturnsExistingOrderWithoutExternalCalls() {
+        UUID customerId = UUID.randomUUID();
+        UUID cartId = UUID.randomUUID();
+        CartItemResponse item = cartItem("SKU-IDEMPOTENT", 1, BigDecimal.TEN);
+        when(cartClient.getCheckoutPreview(customerId)).thenReturn(validPreview(cartId, customerId, List.of(item)));
+
+        OrderResponse first = orderService.createOrder(createRequest(customerId));
+        clearInvocations(cartClient, inventoryClient);
+
+        OrderResponse second = orderService.createOrder(createRequest(customerId));
+
+        assertThat(second.id()).isEqualTo(first.id());
+        assertThat(second.orderNumber()).isEqualTo(first.orderNumber());
+        verify(cartClient, never()).getCheckoutPreview(any(UUID.class));
+        verify(inventoryClient, never()).reserve(any(ReserveStockRequest.class));
+        verify(cartClient, never()).markCheckedOut(any(UUID.class));
+    }
+
+    @Test
+    void duplicateCreateForSourceCartReturnsExistingOrderWithoutSecondReservation() {
+        UUID customerId = UUID.randomUUID();
+        UUID cartId = UUID.randomUUID();
+        CartItemResponse item = cartItem("SKU-CART-IDEMPOTENT", 1, BigDecimal.TEN);
+        when(cartClient.getCheckoutPreview(customerId)).thenReturn(validPreview(cartId, customerId, List.of(item)));
+
+        OrderResponse first = orderService.createOrder(createRequest(customerId, null, null));
+        clearInvocations(inventoryClient, cartClient);
+
+        OrderResponse second = orderService.createOrder(createRequest(customerId, null, null));
+
+        assertThat(second.id()).isEqualTo(first.id());
+        verify(cartClient).getCheckoutPreview(customerId);
+        verify(inventoryClient, never()).reserve(any(ReserveStockRequest.class));
+        verify(cartClient, never()).markCheckedOut(any(UUID.class));
+    }
+
+    @Test
     void confirmsOrderAndConsumesReservation() {
         OrderResponse created = createPersistedOrder("SKU-CONFIRM", UUID.randomUUID());
         clearInvocations(inventoryClient);
@@ -188,6 +271,21 @@ class OrderServiceIntegrationTest {
         ArgumentCaptor<ConsumeStockReservationRequest> captor = ArgumentCaptor.forClass(ConsumeStockReservationRequest.class);
         verify(inventoryClient).consume(captor.capture());
         assertThat(captor.getValue().reservationKey()).isEqualTo(created.items().get(0).reservationKey());
+    }
+
+    @Test
+    void consumeFailurePreventsConfirmationWithoutDuplicateStateMutation() {
+        OrderResponse created = createPersistedOrder("SKU-CONSUME-FAIL", UUID.randomUUID());
+        clearInvocations(inventoryClient);
+        when(inventoryClient.consume(any(ConsumeStockReservationRequest.class)))
+                .thenThrow(new InventoryConsumeFailedException("consume failed"));
+
+        assertThatThrownBy(() -> orderService.confirm(created.id()))
+                .isInstanceOf(InventoryConsumeFailedException.class);
+
+        OrderResponse current = orderService.getOrder(created.id());
+        assertThat(current.status()).isEqualTo(OrderStatus.PENDING);
+        assertThat(current.items().get(0).reservationStatus()).isEqualTo(OrderReservationStatus.ACTIVE);
     }
 
     @Test
@@ -214,6 +312,21 @@ class OrderServiceIntegrationTest {
         assertThat(cancelled.cancellationReason()).isEqualTo("Customer requested cancellation");
         assertThat(cancelled.items().get(0).reservationStatus()).isEqualTo(OrderReservationStatus.RELEASED);
         verify(inventoryClient).release(any(ReleaseStockRequest.class));
+    }
+
+    @Test
+    void releaseFailurePreventsCancellationWithoutMarkingReservationReleased() {
+        OrderResponse created = createPersistedOrder("SKU-RELEASE-FAIL", UUID.randomUUID());
+        clearInvocations(inventoryClient);
+        when(inventoryClient.release(any(ReleaseStockRequest.class)))
+                .thenThrow(new InventoryReleaseFailedException("release failed"));
+
+        assertThatThrownBy(() -> orderService.cancel(created.id(), new CancelOrderRequest("Customer requested cancellation")))
+                .isInstanceOf(InventoryReleaseFailedException.class);
+
+        OrderResponse current = orderService.getOrder(created.id());
+        assertThat(current.status()).isEqualTo(OrderStatus.PENDING);
+        assertThat(current.items().get(0).reservationStatus()).isEqualTo(OrderReservationStatus.ACTIVE);
     }
 
     @Test
@@ -245,6 +358,8 @@ class OrderServiceIntegrationTest {
                 first.orderNumber(),
                 null,
                 null,
+                null,
+                null,
                 PageRequest.of(0, 10)
         );
 
@@ -252,6 +367,27 @@ class OrderServiceIntegrationTest {
         assertThat(customerOrders.content().get(0).customerId()).isEqualTo(firstCustomer);
         assertThat(adminOrders.content()).hasSize(1);
         assertThat(adminOrders.content().get(0).orderNumber()).isEqualTo(first.orderNumber());
+    }
+
+    @Test
+    void adminFiltersByTotalRange() {
+        UUID customerId = UUID.randomUUID();
+        OrderResponse small = createPersistedOrder("SKU-TOTAL-SMALL", customerId, BigDecimal.valueOf(1000, 2));
+        createPersistedOrder("SKU-TOTAL-LARGE", UUID.randomUUID(), BigDecimal.valueOf(6000, 2));
+
+        PageResponse<OrderListItemResponse> adminOrders = orderService.listAdmin(
+                OrderStatus.PENDING,
+                null,
+                null,
+                null,
+                null,
+                BigDecimal.valueOf(900, 2),
+                BigDecimal.valueOf(2000, 2),
+                PageRequest.of(0, 10)
+        );
+
+        assertThat(adminOrders.content()).hasSize(1);
+        assertThat(adminOrders.content().get(0).id()).isEqualTo(small.id());
     }
 
     @Test
@@ -266,13 +402,21 @@ class OrderServiceIntegrationTest {
     }
 
     private OrderResponse createPersistedOrder(String sku, UUID customerId) {
+        return createPersistedOrder(sku, customerId, BigDecimal.valueOf(2500, 2));
+    }
+
+    private OrderResponse createPersistedOrder(String sku, UUID customerId, BigDecimal unitPrice) {
         UUID cartId = UUID.randomUUID();
-        CartItemResponse item = cartItem(sku, 1, BigDecimal.valueOf(2500, 2));
+        CartItemResponse item = cartItem(sku, 1, unitPrice);
         when(cartClient.getCheckoutPreview(customerId)).thenReturn(validPreview(cartId, customerId, List.of(item)));
         return orderService.createOrder(createRequest(customerId));
     }
 
     private CreateOrderRequest createRequest(UUID customerId) {
+        return createRequest(customerId, "checkout-" + customerId, "web-" + customerId);
+    }
+
+    private CreateOrderRequest createRequest(UUID customerId, String idempotencyKey, String externalReference) {
         return new CreateOrderRequest(
                 customerId,
                 new AddressSnapshotRequest(
@@ -285,7 +429,9 @@ class OrderServiceIntegrationTest {
                         "TR"
                 ),
                 "Leave at reception",
-                OrderSource.WEB
+                OrderSource.WEB,
+                idempotencyKey,
+                externalReference
         );
     }
 
@@ -326,13 +472,17 @@ class OrderServiceIntegrationTest {
     }
 
     private CartItemResponse cartItem(String sku, int quantity, BigDecimal unitPrice) {
+        return cartItem(sku, quantity, unitPrice, "Cotton Shirt");
+    }
+
+    private CartItemResponse cartItem(String sku, int quantity, BigDecimal unitPrice, String productName) {
         UUID variantId = UUID.randomUUID();
         return new CartItemResponse(
                 UUID.randomUUID(),
                 UUID.randomUUID(),
                 variantId,
                 sku,
-                "Cotton Shirt",
+                productName,
                 "cotton-shirt",
                 "Black / M",
                 "https://assets.ascmoda.test/cotton-shirt.jpg",
