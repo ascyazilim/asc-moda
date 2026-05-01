@@ -4,6 +4,11 @@ server:
 ascmoda:
   inventory:
     config-source: config-server
+    outbox:
+      enabled: ${INVENTORY_OUTBOX_ENABLED:true}
+      batch-size: ${INVENTORY_OUTBOX_BATCH_SIZE:25}
+      max-retries: ${INVENTORY_OUTBOX_MAX_RETRIES:5}
+      publish-delay-ms: ${INVENTORY_OUTBOX_PUBLISH_DELAY_MS:5000}
 
 spring:
   application:
@@ -29,6 +34,11 @@ spring:
     properties:
       hibernate:
         format_sql: false
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:asc_moda}
+    password: ${RABBITMQ_PASSWORD:asc_moda}
 
 eureka:
   client:

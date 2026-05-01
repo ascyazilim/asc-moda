@@ -4,6 +4,10 @@ import com.ascmoda.notification.application.dto.ParsedNotificationEvent;
 import com.ascmoda.notification.domain.exception.InvalidMessagePayloadException;
 import com.ascmoda.notification.domain.exception.UnsupportedNotificationEventException;
 import com.ascmoda.shared.kernel.event.EventTypes;
+import com.ascmoda.shared.kernel.event.inventory.InventoryLowStockEvent;
+import com.ascmoda.shared.kernel.event.inventory.InventoryStockConsumedEvent;
+import com.ascmoda.shared.kernel.event.inventory.InventoryStockReleasedEvent;
+import com.ascmoda.shared.kernel.event.inventory.InventoryStockReservedEvent;
 import com.ascmoda.shared.kernel.event.order.OrderCancelledEvent;
 import com.ascmoda.shared.kernel.event.order.OrderConfirmedEvent;
 import com.ascmoda.shared.kernel.event.order.OrderCreatedEvent;
@@ -40,6 +44,13 @@ public class NotificationEventParser {
                 case EventTypes.ORDER_CREATED -> objectMapper.treeToValue(payloadNode, OrderCreatedEvent.class);
                 case EventTypes.ORDER_CONFIRMED -> objectMapper.treeToValue(payloadNode, OrderConfirmedEvent.class);
                 case EventTypes.ORDER_CANCELLED -> objectMapper.treeToValue(payloadNode, OrderCancelledEvent.class);
+                case EventTypes.INVENTORY_STOCK_RESERVED ->
+                        objectMapper.treeToValue(payloadNode, InventoryStockReservedEvent.class);
+                case EventTypes.INVENTORY_STOCK_RELEASED ->
+                        objectMapper.treeToValue(payloadNode, InventoryStockReleasedEvent.class);
+                case EventTypes.INVENTORY_STOCK_CONSUMED ->
+                        objectMapper.treeToValue(payloadNode, InventoryStockConsumedEvent.class);
+                case EventTypes.INVENTORY_STOCK_LOW -> objectMapper.treeToValue(payloadNode, InventoryLowStockEvent.class);
                 default -> throw new UnsupportedNotificationEventException("Unsupported event type: " + eventType);
             };
 

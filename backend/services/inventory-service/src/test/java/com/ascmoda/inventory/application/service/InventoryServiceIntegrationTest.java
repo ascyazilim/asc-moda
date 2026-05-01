@@ -16,8 +16,10 @@ import com.ascmoda.inventory.api.error.InvalidStockStateException;
 import com.ascmoda.inventory.domain.model.ReferenceType;
 import com.ascmoda.inventory.domain.model.StockMovementType;
 import com.ascmoda.inventory.domain.model.StockReservationStatus;
+import com.ascmoda.inventory.domain.repository.InventoryOutboxEventRepository;
 import com.ascmoda.inventory.infrastructure.catalog.CatalogVariantClient;
 import com.ascmoda.inventory.infrastructure.catalog.CatalogVariantResponse;
+import com.ascmoda.shared.kernel.event.EventTypes;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -46,6 +48,7 @@ import static org.mockito.Mockito.when;
         "eureka.client.register-with-eureka=false",
         "eureka.client.fetch-registry=false",
         "spring.jpa.open-in-view=false",
+        "ascmoda.inventory.outbox.enabled=false",
         "ascmoda.inventory.config-source=test"
 })
 @Testcontainers(disabledWithoutDocker = true)
@@ -57,6 +60,9 @@ class InventoryServiceIntegrationTest {
 
     @Autowired
     private InventoryService inventoryService;
+
+    @Autowired
+    private InventoryOutboxEventRepository inventoryOutboxEventRepository;
 
     @MockitoBean
     private CatalogVariantClient catalogVariantClient;
@@ -142,6 +148,7 @@ class InventoryServiceIntegrationTest {
         assertThat(second.status()).isEqualTo(StockReservationStatus.ACTIVE);
         assertThat(inventory.reservedQuantity()).isEqualTo(6);
         assertThat(inventory.availableQuantity()).isEqualTo(4);
+        assertThat(outboxCount(item.id(), EventTypes.INVENTORY_STOCK_RESERVED)).isEqualTo(1);
     }
 
     @Test
@@ -165,6 +172,7 @@ class InventoryServiceIntegrationTest {
         assertThat(released.status()).isEqualTo(StockReservationStatus.RELEASED);
         assertThat(inventory.reservedQuantity()).isZero();
         assertThat(inventory.availableQuantity()).isEqualTo(10);
+        assertThat(outboxCount(item.id(), EventTypes.INVENTORY_STOCK_RELEASED)).isEqualTo(1);
     }
 
     @Test
@@ -179,6 +187,18 @@ class InventoryServiceIntegrationTest {
         assertThat(inventory.quantityOnHand()).isEqualTo(6);
         assertThat(inventory.reservedQuantity()).isZero();
         assertThat(inventory.availableQuantity()).isEqualTo(6);
+        assertThat(outboxCount(item.id(), EventTypes.INVENTORY_STOCK_CONSUMED)).isEqualTo(1);
+    }
+
+    @Test
+    void recordsLowStockEventOnlyWhenEnteringLowStockState() {
+        InventoryItemResponse item = createItem("SKU-LOW-EVENT-1", 5, 2);
+
+        inventoryService.reserve(reserveRequest(item.id(), 4, "ORDER-LOW-1", "RES-LOW-1"));
+        inventoryService.reserve(reserveRequest(item.id(), 1, "ORDER-LOW-2", "RES-LOW-2"));
+
+        assertThat(outboxCount(item.id(), EventTypes.INVENTORY_STOCK_LOW)).isEqualTo(1);
+        assertThat(outboxCount(item.id(), EventTypes.INVENTORY_STOCK_RESERVED)).isEqualTo(2);
     }
 
     @Test
@@ -308,6 +328,10 @@ class InventoryServiceIntegrationTest {
 
     private void mockCatalogVariant(UUID variantId, String sku) {
         when(catalogVariantClient.getVariant(variantId)).thenReturn(catalogVariant(variantId, sku));
+    }
+
+    private long outboxCount(UUID inventoryItemId, String eventType) {
+        return inventoryOutboxEventRepository.countByAggregateIdAndEventType(inventoryItemId.toString(), eventType);
     }
 
     private CatalogVariantResponse catalogVariant(UUID variantId, String sku) {

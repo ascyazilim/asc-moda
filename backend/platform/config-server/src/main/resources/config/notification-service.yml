@@ -7,6 +7,8 @@ ascmoda:
     sender:
       log:
         enabled: ${NOTIFICATION_LOG_SENDER_ENABLED:true}
+    recipient:
+      ops: ${NOTIFICATION_OPS_RECIPIENT:ops@ascmoda.local}
     retry:
       max-attempts: ${NOTIFICATION_RETRY_MAX_ATTEMPTS:3}
 

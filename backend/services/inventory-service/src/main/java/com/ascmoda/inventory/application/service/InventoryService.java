@@ -60,6 +60,7 @@ public class InventoryService {
     private final StockMovementMapper stockMovementMapper;
     private final StockReservationMapper stockReservationMapper;
     private final CatalogVariantClient catalogVariantClient;
+    private final InventoryOutboxService inventoryOutboxService;
 
     public InventoryService(InventoryItemRepository inventoryItemRepository,
                             StockMovementRepository stockMovementRepository,
@@ -67,7 +68,8 @@ public class InventoryService {
                             InventoryItemMapper inventoryItemMapper,
                             StockMovementMapper stockMovementMapper,
                             StockReservationMapper stockReservationMapper,
-                            CatalogVariantClient catalogVariantClient) {
+                            CatalogVariantClient catalogVariantClient,
+                            InventoryOutboxService inventoryOutboxService) {
         this.inventoryItemRepository = inventoryItemRepository;
         this.stockMovementRepository = stockMovementRepository;
         this.stockReservationRepository = stockReservationRepository;
@@ -75,6 +77,7 @@ public class InventoryService {
         this.stockMovementMapper = stockMovementMapper;
         this.stockReservationMapper = stockReservationMapper;
         this.catalogVariantClient = catalogVariantClient;
+        this.inventoryOutboxService = inventoryOutboxService;
     }
 
     @Transactional
@@ -96,6 +99,7 @@ public class InventoryService {
 
         InventoryItem saved = inventoryItemRepository.save(item);
         recordInitialMovement(saved);
+        syncLowStockAlert(saved, null);
         log.info("Created inventory item id={} productVariantId={} sku={}",
                 saved.getId(), saved.getProductVariantId(), saved.getSku());
         return inventoryItemMapper.toResponse(saved);
@@ -128,6 +132,7 @@ public class InventoryService {
                     beforeQuantityOnHand, item.getQuantityOnHand(),
                     beforeReservedQuantity, item.getReservedQuantity());
         }
+        syncLowStockAlert(item, null);
         log.info("Updated inventory item id={} productVariantId={} sku={}",
                 item.getId(), item.getProductVariantId(), item.getSku());
         return inventoryItemMapper.toResponse(item);
@@ -137,6 +142,7 @@ public class InventoryService {
     public InventoryItemResponse activate(UUID id) {
         InventoryItem item = getItem(id);
         item.activate();
+        syncLowStockAlert(item, null);
         log.info("Activated inventory item id={} sku={}", item.getId(), item.getSku());
         return inventoryItemMapper.toResponse(item);
     }
@@ -145,6 +151,7 @@ public class InventoryService {
     public InventoryItemResponse deactivate(UUID id) {
         InventoryItem item = getItem(id);
         item.deactivate();
+        item.clearLowStockAlertIfRecovered();
         log.info("Deactivated inventory item id={} sku={}", item.getId(), item.getSku());
         return inventoryItemMapper.toResponse(item);
     }
@@ -171,6 +178,7 @@ public class InventoryService {
         recordMovement(item, StockMovementType.INCREASE, request.quantity(), request.note(),
                 defaultReferenceType(request.referenceType(), ReferenceType.ADMIN), request.referenceId(),
                 beforeQuantityOnHand, item.getQuantityOnHand(), beforeReservedQuantity, item.getReservedQuantity());
+        syncLowStockAlert(item, null);
         log.info("Increased inventory item id={} sku={} quantity={}", item.getId(), item.getSku(), request.quantity());
         return inventoryItemMapper.toResponse(item);
     }
@@ -185,6 +193,7 @@ public class InventoryService {
         recordMovement(item, StockMovementType.DECREASE, request.quantity(), request.note(),
                 defaultReferenceType(request.referenceType(), ReferenceType.ADMIN), request.referenceId(),
                 beforeQuantityOnHand, item.getQuantityOnHand(), beforeReservedQuantity, item.getReservedQuantity());
+        syncLowStockAlert(item, null);
         log.info("Decreased inventory item id={} sku={} quantity={}", item.getId(), item.getSku(), request.quantity());
         return inventoryItemMapper.toResponse(item);
     }
@@ -218,6 +227,8 @@ public class InventoryService {
         recordMovement(item, StockMovementType.RESERVE, request.quantity(), request.note(),
                 referenceType, referenceId, beforeQuantityOnHand, item.getQuantityOnHand(),
                 beforeReservedQuantity, item.getReservedQuantity());
+        inventoryOutboxService.recordStockReserved(item, reservation, request.quantity());
+        syncLowStockAlert(item, reservation);
         log.info("Reserved stock inventoryItemId={} reservationId={} sku={} quantity={}",
                 item.getId(), reservation.getId(), item.getSku(), request.quantity());
         return stockReservationMapper.toResponse(reservation);
@@ -236,6 +247,8 @@ public class InventoryService {
         recordMovement(item, StockMovementType.RELEASE, releasedQuantity, request.note(),
                 reservation.getReferenceType(), reservation.getReferenceId(),
                 beforeQuantityOnHand, item.getQuantityOnHand(), beforeReservedQuantity, item.getReservedQuantity());
+        inventoryOutboxService.recordStockReleased(item, reservation, releasedQuantity);
+        syncLowStockAlert(item, reservation);
         log.info("Released reservation reservationId={} inventoryItemId={} quantity={}",
                 reservation.getId(), item.getId(), releasedQuantity);
         return stockReservationMapper.toResponse(reservation);
@@ -254,6 +267,8 @@ public class InventoryService {
         recordMovement(item, StockMovementType.CONSUME, consumedQuantity, request.note(),
                 reservation.getReferenceType(), reservation.getReferenceId(),
                 beforeQuantityOnHand, item.getQuantityOnHand(), beforeReservedQuantity, item.getReservedQuantity());
+        inventoryOutboxService.recordStockConsumed(item, reservation, consumedQuantity);
+        syncLowStockAlert(item, reservation);
         log.info("Consumed reservation reservationId={} inventoryItemId={} quantity={}",
                 reservation.getId(), item.getId(), consumedQuantity);
         return stockReservationMapper.toResponse(reservation);
@@ -380,9 +395,16 @@ public class InventoryService {
         recordMovement(item, StockMovementType.ADJUSTMENT, Math.abs(targetQuantity - beforeQuantityOnHand), request.note(),
                 defaultReferenceType(request.referenceType(), ReferenceType.ADMIN), request.referenceId(),
                 beforeQuantityOnHand, item.getQuantityOnHand(), beforeReservedQuantity, item.getReservedQuantity());
+        syncLowStockAlert(item, null);
         log.info("Adjusted inventory item id={} sku={} targetQuantity={}",
                 item.getId(), item.getSku(), targetQuantity);
         return inventoryItemMapper.toResponse(item);
+    }
+
+    private void syncLowStockAlert(InventoryItem item, StockReservation reservation) {
+        if (item.markLowStockAlertIfNeeded()) {
+            inventoryOutboxService.recordLowStock(item, reservation);
+        }
     }
 
     private void recordInitialMovement(InventoryItem item) {

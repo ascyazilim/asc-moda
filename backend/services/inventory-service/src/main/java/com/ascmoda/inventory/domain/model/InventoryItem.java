@@ -44,6 +44,9 @@ public class InventoryItem extends BaseAuditableEntity {
     @Column(name = "low_stock_threshold", nullable = false)
     private int lowStockThreshold = 5;
 
+    @Column(name = "low_stock_alert_active", nullable = false)
+    private boolean lowStockAlertActive;
+
     @Column(name = "last_stock_change_at")
     private Instant lastStockChangeAt;
 
@@ -159,6 +162,23 @@ public class InventoryItem extends BaseAuditableEntity {
         return active && availableQuantity() <= lowStockThreshold;
     }
 
+    public boolean markLowStockAlertIfNeeded() {
+        if (isLowStock() && !lowStockAlertActive) {
+            lowStockAlertActive = true;
+            return true;
+        }
+        if (!isLowStock()) {
+            lowStockAlertActive = false;
+        }
+        return false;
+    }
+
+    public void clearLowStockAlertIfRecovered() {
+        if (!isLowStock()) {
+            lowStockAlertActive = false;
+        }
+    }
+
     public void activate() {
         active = true;
     }
@@ -230,6 +250,10 @@ public class InventoryItem extends BaseAuditableEntity {
 
     public int getLowStockThreshold() {
         return lowStockThreshold;
+    }
+
+    public boolean isLowStockAlertActive() {
+        return lowStockAlertActive;
     }
 
     public Instant getLastStockChangeAt() {

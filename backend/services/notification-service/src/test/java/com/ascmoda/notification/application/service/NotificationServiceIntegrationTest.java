@@ -11,6 +11,10 @@ import com.ascmoda.notification.domain.model.NotificationType;
 import com.ascmoda.notification.domain.repository.NotificationMessageRepository;
 import com.ascmoda.shared.kernel.event.EventEnvelope;
 import com.ascmoda.shared.kernel.event.EventTypes;
+import com.ascmoda.shared.kernel.event.inventory.InventoryLowStockEvent;
+import com.ascmoda.shared.kernel.event.inventory.InventoryStockConsumedEvent;
+import com.ascmoda.shared.kernel.event.inventory.InventoryStockReleasedEvent;
+import com.ascmoda.shared.kernel.event.inventory.InventoryStockReservedEvent;
 import com.ascmoda.shared.kernel.event.order.OrderCancelledEvent;
 import com.ascmoda.shared.kernel.event.order.OrderConfirmedEvent;
 import com.ascmoda.shared.kernel.event.order.OrderCreatedEvent;
@@ -54,6 +58,7 @@ import static org.mockito.Mockito.verify;
         "spring.rabbitmq.listener.simple.auto-startup=false",
         "spring.rabbitmq.listener.direct.auto-startup=false",
         "ascmoda.notification.config-source=test",
+        "ascmoda.notification.recipient.ops=ops@ascmoda.local",
         "ascmoda.notification.retry.max-attempts=3"
 })
 @Testcontainers(disabledWithoutDocker = true)
@@ -126,6 +131,74 @@ class NotificationServiceIntegrationTest {
     }
 
     @Test
+    void consumesInventoryStockReservedEvent() throws Exception {
+        NotificationResponse response = notificationService.process(
+                inventoryEnvelope(EventTypes.INVENTORY_STOCK_RESERVED, stockReservedPayload("SKU-INV-1"))
+        );
+
+        assertThat(response.notificationType()).isEqualTo(NotificationType.STOCK_RESERVED);
+        assertThat(response.channel()).isEqualTo(NotificationChannel.EMAIL);
+        assertThat(response.recipient()).isEqualTo("ops@ascmoda.local");
+        assertThat(response.referenceType()).isEqualTo("INVENTORY");
+        assertThat(response.subject()).contains("SKU-INV-1");
+    }
+
+    @Test
+    void consumesInventoryStockReleasedEvent() throws Exception {
+        NotificationResponse response = notificationService.process(
+                inventoryEnvelope(EventTypes.INVENTORY_STOCK_RELEASED, stockReleasedPayload("SKU-INV-2"))
+        );
+
+        assertThat(response.notificationType()).isEqualTo(NotificationType.STOCK_RELEASED);
+        assertThat(response.status()).isEqualTo(NotificationStatus.SENT);
+        assertThat(response.body()).contains("serbest birakildi");
+    }
+
+    @Test
+    void consumesInventoryStockConsumedEvent() throws Exception {
+        NotificationResponse response = notificationService.process(
+                inventoryEnvelope(EventTypes.INVENTORY_STOCK_CONSUMED, stockConsumedPayload("SKU-INV-3"))
+        );
+
+        assertThat(response.notificationType()).isEqualTo(NotificationType.STOCK_CONSUMED);
+        assertThat(response.status()).isEqualTo(NotificationStatus.SENT);
+        assertThat(response.body()).contains("tuketildi");
+    }
+
+    @Test
+    void consumesInventoryLowStockEvent() throws Exception {
+        NotificationResponse response = notificationService.process(
+                inventoryEnvelope(EventTypes.INVENTORY_STOCK_LOW, lowStockPayload("SKU-INV-4"))
+        );
+
+        assertThat(response.notificationType()).isEqualTo(NotificationType.LOW_STOCK_ALERT);
+        assertThat(response.status()).isEqualTo(NotificationStatus.SENT);
+        assertThat(response.subject()).contains("Dusuk stok");
+        assertThat(response.body()).contains("esik");
+    }
+
+    @Test
+    void retriesFailedInventoryNotification() throws Exception {
+        doThrow(new RuntimeException("ops channel down"))
+                .when(notificationSender)
+                .send(any(NotificationMessage.class));
+
+        NotificationResponse failed = notificationService.process(
+                inventoryEnvelope(EventTypes.INVENTORY_STOCK_LOW, lowStockPayload("SKU-INV-5"))
+        );
+
+        assertThat(failed.notificationType()).isEqualTo(NotificationType.LOW_STOCK_ALERT);
+        assertThat(failed.status()).isEqualTo(NotificationStatus.FAILED);
+
+        reset(notificationSender);
+        doNothing().when(notificationSender).send(any(NotificationMessage.class));
+        NotificationResponse retried = notificationService.retry(failed.id());
+
+        assertThat(retried.status()).isEqualTo(NotificationStatus.SENT);
+        assertThat(retried.retryCount()).isEqualTo(1);
+    }
+
+    @Test
     void duplicateEventIdDoesNotCreateSecondNotification() throws Exception {
         UUID eventId = UUID.randomUUID();
         String message = envelope(eventId, EventTypes.ORDER_CREATED, createdPayload("ORD-103"));
@@ -190,11 +263,20 @@ class NotificationServiceIntegrationTest {
     }
 
     private String envelope(UUID eventId, String eventType, Object payload) throws JsonProcessingException {
+        return envelope(eventId, eventType, "order-service", payload);
+    }
+
+    private String inventoryEnvelope(String eventType, Object payload) throws JsonProcessingException {
+        return envelope(UUID.randomUUID(), eventType, "inventory-service", payload);
+    }
+
+    private String envelope(UUID eventId, String eventType, String sourceService, Object payload)
+            throws JsonProcessingException {
         EventEnvelope<Object> envelope = new EventEnvelope<>(
                 eventId,
                 eventType,
                 Instant.now(),
-                "order-service",
+                sourceService,
                 "corr-" + eventId,
                 payload
         );
@@ -247,6 +329,77 @@ class NotificationServiceIntegrationTest {
                 "+90 555 000 00 00",
                 "web-" + orderNumber,
                 null
+        );
+    }
+
+    private InventoryStockReservedEvent stockReservedPayload(String sku) {
+        return new InventoryStockReservedEvent(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                sku,
+                10,
+                3,
+                7,
+                3,
+                5,
+                "ORDER",
+                "ORD-INV-1",
+                UUID.randomUUID(),
+                Instant.now(),
+                "inventory-service"
+        );
+    }
+
+    private InventoryStockReleasedEvent stockReleasedPayload(String sku) {
+        return new InventoryStockReleasedEvent(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                sku,
+                10,
+                0,
+                10,
+                3,
+                5,
+                "ORDER",
+                "ORD-INV-2",
+                UUID.randomUUID(),
+                Instant.now(),
+                "inventory-service"
+        );
+    }
+
+    private InventoryStockConsumedEvent stockConsumedPayload(String sku) {
+        return new InventoryStockConsumedEvent(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                sku,
+                7,
+                0,
+                7,
+                3,
+                5,
+                "ORDER",
+                "ORD-INV-3",
+                UUID.randomUUID(),
+                Instant.now(),
+                "inventory-service"
+        );
+    }
+
+    private InventoryLowStockEvent lowStockPayload(String sku) {
+        return new InventoryLowStockEvent(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                sku,
+                5,
+                4,
+                1,
+                5,
+                "ORDER",
+                "ORD-INV-4",
+                UUID.randomUUID(),
+                Instant.now(),
+                "inventory-service"
         );
     }
 }
