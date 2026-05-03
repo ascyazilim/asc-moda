@@ -26,6 +26,10 @@ spring:
               uri: lb://cart-service
               predicates:
                 - Path=/api/v1/carts/**,/api/v1/admin/carts,/api/v1/admin/carts/**,/api/v1/internal/carts/**
+            - id: customer-service
+              uri: lb://customer-service
+              predicates:
+                - Path=/api/v1/customers/**,/api/v1/admin/customers,/api/v1/admin/customers/**,/api/v1/internal/customers/**
             - id: order-service
               uri: lb://order-service
               predicates:

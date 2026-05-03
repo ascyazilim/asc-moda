@@ -1,10 +1,8 @@
-package com.ascmoda.services.customer;
+package com.ascmoda.customer;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.cloud.openfeign.EnableFeignClients;
 
-@EnableFeignClients
 @SpringBootApplication
 public class CustomerServiceApplication {
 
