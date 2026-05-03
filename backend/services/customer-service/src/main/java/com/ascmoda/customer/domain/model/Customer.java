@@ -1,6 +1,6 @@
 package com.ascmoda.customer.domain.model;
 
-import com.ascmoda.customer.domain.exception.IllegalBusinessStateException;
+import com.ascmoda.customer.domain.exception.BlockedCustomerOperationException;
 import com.ascmoda.customer.domain.exception.InvalidCustomerStatusTransitionException;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -79,7 +79,7 @@ public class Customer extends BaseAuditableEntity {
     public void updateProfile(String externalUserId, String email, String phoneNumber, String firstName,
                               String lastName, Boolean emailVerified, Boolean phoneVerified,
                               Boolean marketingConsent) {
-        ensureMutable();
+        ensureProfileUpdateAllowed();
         if (externalUserId != null) {
             this.externalUserId = externalUserId;
         }
@@ -110,6 +110,14 @@ public class Customer extends BaseAuditableEntity {
         if (targetStatus == null) {
             throw new InvalidCustomerStatusTransitionException("Customer status must be provided");
         }
+        if (status == targetStatus) {
+            return;
+        }
+        if (status == CustomerStatus.BLOCKED && targetStatus == CustomerStatus.ACTIVE) {
+            throw new InvalidCustomerStatusTransitionException(
+                    "Blocked customer cannot be activated directly; move to PASSIVE first"
+            );
+        }
         status = targetStatus;
     }
 
@@ -118,14 +126,28 @@ public class Customer extends BaseAuditableEntity {
         addresses.add(address);
     }
 
-    public void ensureMutable() {
+    public void ensureProfileUpdateAllowed() {
         if (status == CustomerStatus.BLOCKED) {
-            throw new IllegalBusinessStateException("Blocked customer cannot be modified");
+            throw new BlockedCustomerOperationException("Blocked customer profile cannot be updated");
         }
+    }
+
+    public void ensureAddressManagementAllowed() {
+        if (status == CustomerStatus.BLOCKED) {
+            throw new BlockedCustomerOperationException("Blocked customer addresses cannot be changed");
+        }
+    }
+
+    public void ensureMutable() {
+        ensureProfileUpdateAllowed();
     }
 
     public String fullName() {
         return firstName + " " + lastName;
+    }
+
+    public String displayName() {
+        return fullName();
     }
 
     public UUID getId() {

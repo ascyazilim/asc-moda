@@ -18,4 +18,6 @@ public interface CustomerAddressRepository extends JpaRepository<CustomerAddress
     Optional<CustomerAddress> findByCustomerIdAndDefaultShippingTrueAndActiveTrue(UUID customerId);
 
     Optional<CustomerAddress> findByCustomerIdAndDefaultBillingTrueAndActiveTrue(UUID customerId);
+
+    boolean existsByCustomerIdAndActiveTrue(UUID customerId);
 }

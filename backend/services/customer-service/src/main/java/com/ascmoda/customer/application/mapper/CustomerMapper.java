@@ -14,10 +14,16 @@ public interface CustomerMapper {
     CustomerResponse toResponse(Customer customer);
 
     @Mapping(target = "customerId", source = "customer.id")
+    @Mapping(target = "externalUserId", source = "customer.externalUserId")
     @Mapping(target = "fullName", expression = "java(customer.fullName())")
+    @Mapping(target = "displayName", expression = "java(customer.displayName())")
     @Mapping(target = "email", source = "customer.email")
     @Mapping(target = "phoneNumber", source = "customer.phoneNumber")
     @Mapping(target = "status", source = "customer.status")
+    @Mapping(target = "emailVerified", source = "customer.emailVerified")
+    @Mapping(target = "phoneVerified", source = "customer.phoneVerified")
+    @Mapping(target = "hasDefaultShippingAddress", expression = "java(defaultShippingAddress != null)")
+    @Mapping(target = "hasDefaultBillingAddress", expression = "java(defaultBillingAddress != null)")
     @Mapping(target = "defaultShippingAddress", source = "defaultShippingAddress")
     @Mapping(target = "defaultBillingAddress", source = "defaultBillingAddress")
     CustomerSummaryResponse toSummaryResponse(

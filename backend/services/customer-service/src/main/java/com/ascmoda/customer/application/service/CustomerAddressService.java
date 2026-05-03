@@ -41,7 +41,7 @@ public class CustomerAddressService {
     @Transactional
     public CustomerAddressResponse addAddress(UUID customerId, CreateCustomerAddressRequest request) {
         Customer customer = getCustomerEntity(customerId);
-        customer.ensureMutable();
+        customer.ensureAddressManagementAllowed();
 
         CustomerAddress address = new CustomerAddress(
                 normalizeRequired(request.title(), "Address title"),
@@ -74,7 +74,7 @@ public class CustomerAddressService {
     @Transactional
     public CustomerAddressResponse updateAddress(UUID customerId, UUID addressId, UpdateCustomerAddressRequest request) {
         CustomerAddress address = getAddressForCustomer(customerId, addressId);
-        address.getCustomer().ensureMutable();
+        address.getCustomer().ensureAddressManagementAllowed();
 
         address.update(
                 normalizeRequiredIfPresent(request.title(), "Address title"),
@@ -111,7 +111,7 @@ public class CustomerAddressService {
     @Transactional
     public CustomerAddressResponse deactivateAddress(UUID customerId, UUID addressId) {
         CustomerAddress address = getAddressForCustomer(customerId, addressId);
-        address.getCustomer().ensureMutable();
+        address.getCustomer().ensureAddressManagementAllowed();
         address.markInactive();
         log.info("Deactivated customer address customerId={} addressId={}", customerId, addressId);
         return customerAddressMapper.toResponse(address);
@@ -129,7 +129,7 @@ public class CustomerAddressService {
     @Transactional
     public CustomerAddressResponse setDefaultShippingAddress(UUID customerId, UUID addressId) {
         CustomerAddress address = getAddressForCustomer(customerId, addressId);
-        address.getCustomer().ensureMutable();
+        address.getCustomer().ensureAddressManagementAllowed();
         makeDefaultShipping(customerId, address);
         log.info("Set default shipping address customerId={} addressId={}", customerId, addressId);
         return customerAddressMapper.toResponse(address);
@@ -138,7 +138,7 @@ public class CustomerAddressService {
     @Transactional
     public CustomerAddressResponse setDefaultBillingAddress(UUID customerId, UUID addressId) {
         CustomerAddress address = getAddressForCustomer(customerId, addressId);
-        address.getCustomer().ensureMutable();
+        address.getCustomer().ensureAddressManagementAllowed();
         makeDefaultBilling(customerId, address);
         log.info("Set default billing address customerId={} addressId={}", customerId, addressId);
         return customerAddressMapper.toResponse(address);
@@ -146,15 +146,24 @@ public class CustomerAddressService {
 
     @Transactional(readOnly = true)
     public CustomerDefaultAddressesResponse getDefaultAddresses(UUID customerId) {
-        ensureCustomerExists(customerId);
+        Customer customer = getCustomerEntity(customerId);
+        CustomerAddress shipping = customerAddressRepository
+                .findByCustomerIdAndDefaultShippingTrueAndActiveTrue(customerId)
+                .orElse(null);
+        CustomerAddress billing = customerAddressRepository
+                .findByCustomerIdAndDefaultBillingTrueAndActiveTrue(customerId)
+                .orElse(null);
         return new CustomerDefaultAddressesResponse(
                 customerId,
-                customerAddressRepository.findByCustomerIdAndDefaultShippingTrueAndActiveTrue(customerId)
-                        .map(customerAddressMapper::toResponse)
-                        .orElse(null),
-                customerAddressRepository.findByCustomerIdAndDefaultBillingTrueAndActiveTrue(customerId)
-                        .map(customerAddressMapper::toResponse)
-                        .orElse(null)
+                customer.getExternalUserId(),
+                customer.fullName(),
+                customer.displayName(),
+                customer.getStatus(),
+                customerAddressRepository.existsByCustomerIdAndActiveTrue(customerId),
+                shipping != null,
+                billing != null,
+                shipping == null ? null : customerAddressMapper.toResponse(shipping),
+                billing == null ? null : customerAddressMapper.toResponse(billing)
         );
     }
 

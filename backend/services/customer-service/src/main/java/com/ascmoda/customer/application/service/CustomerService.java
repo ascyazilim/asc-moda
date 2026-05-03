@@ -52,8 +52,19 @@ public class CustomerService {
         String email = normalizeEmail(request.email());
         String externalUserId = normalizeOptional(request.externalUserId(), "External user id");
 
+        if (externalUserId != null) {
+            Customer existing = customerRepository.findWithAddressesByExternalUserId(externalUserId).orElse(null);
+            if (existing != null) {
+                if (!existing.getEmail().equals(email)) {
+                    throw new DuplicateExternalUserIdException("Customer external user id already exists");
+                }
+                log.info("Customer create matched existing external user customerId={} externalUserId={}",
+                        existing.getId(), externalUserId);
+                return customerMapper.toResponse(existing);
+            }
+        }
+
         ensureEmailAvailable(email);
-        ensureExternalUserIdAvailable(externalUserId);
 
         Customer customer = new Customer(
                 externalUserId,
@@ -150,11 +161,15 @@ public class CustomerService {
 
     @Transactional(readOnly = true)
     public Page<CustomerSummaryResponse> listAdmin(CustomerStatus status, String email, String phoneNumber,
+                                                   String firstName, String lastName, String externalUserId,
                                                    Instant createdFrom, Instant createdTo, Pageable pageable) {
         return customerRepository.findAll(adminSpecification(
                         status,
                         normalizeEmailFilter(email),
                         normalizeFilter(phoneNumber),
+                        normalizeNameFilter(firstName),
+                        normalizeNameFilter(lastName),
+                        normalizeFilter(externalUserId),
                         createdFrom,
                         createdTo
                 ), pageable)
@@ -169,6 +184,13 @@ public class CustomerService {
         CustomerSummaryResponse summary = customerMapper.toSummaryResponse(customer, shipping, billing);
         return new CustomerDefaultAddressesResponse(
                 customer.getId(),
+                customer.getExternalUserId(),
+                customer.fullName(),
+                customer.displayName(),
+                customer.getStatus(),
+                customerAddressRepository.existsByCustomerIdAndActiveTrue(customer.getId()),
+                summary.hasDefaultShippingAddress(),
+                summary.hasDefaultBillingAddress(),
                 summary.defaultShippingAddress(),
                 summary.defaultBillingAddress()
         );
@@ -214,12 +236,6 @@ public class CustomerService {
         }
     }
 
-    private void ensureExternalUserIdAvailable(String externalUserId) {
-        if (externalUserId != null && customerRepository.existsByExternalUserId(externalUserId)) {
-            throw new DuplicateExternalUserIdException("Customer external user id already exists");
-        }
-    }
-
     private void ensureExternalUserIdAvailableForUpdate(String externalUserId, UUID customerId) {
         if (customerRepository.existsByExternalUserIdAndIdNot(externalUserId, customerId)) {
             throw new DuplicateExternalUserIdException("Customer external user id already exists");
@@ -259,6 +275,7 @@ public class CustomerService {
     }
 
     private Specification<Customer> adminSpecification(CustomerStatus status, String email, String phoneNumber,
+                                                       String firstName, String lastName, String externalUserId,
                                                        Instant createdFrom, Instant createdTo) {
         return (root, query, criteriaBuilder) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -270,6 +287,17 @@ public class CustomerService {
             }
             if (phoneNumber != null) {
                 predicates.add(criteriaBuilder.like(root.get("phoneNumber"), "%" + phoneNumber + "%"));
+            }
+            if (firstName != null) {
+                predicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("firstName")),
+                        "%" + firstName + "%"));
+            }
+            if (lastName != null) {
+                predicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("lastName")),
+                        "%" + lastName + "%"));
+            }
+            if (externalUserId != null) {
+                predicates.add(criteriaBuilder.like(root.get("externalUserId"), "%" + externalUserId + "%"));
             }
             if (createdFrom != null) {
                 predicates.add(criteriaBuilder.greaterThanOrEqualTo(root.get("createdAt"), createdFrom));
@@ -293,6 +321,13 @@ public class CustomerService {
             return null;
         }
         return value.trim();
+    }
+
+    private String normalizeNameFilter(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim().toLowerCase(Locale.ROOT);
     }
 
     private String normalizeRequired(String value, String fieldName) {

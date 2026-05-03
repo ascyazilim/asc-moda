@@ -36,11 +36,24 @@ public class AdminCustomerController {
             @RequestParam(required = false) CustomerStatus status,
             @RequestParam(required = false) String email,
             @RequestParam(required = false) String phoneNumber,
+            @RequestParam(required = false) String firstName,
+            @RequestParam(required = false) String lastName,
+            @RequestParam(required = false) String externalUserId,
             @RequestParam(required = false) Instant createdFrom,
             @RequestParam(required = false) Instant createdTo,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
-        return customerService.listAdmin(status, email, phoneNumber, createdFrom, createdTo, pageable);
+        return customerService.listAdmin(
+                status,
+                email,
+                phoneNumber,
+                firstName,
+                lastName,
+                externalUserId,
+                createdFrom,
+                createdTo,
+                pageable
+        );
     }
 
     @GetMapping("/{customerId}")

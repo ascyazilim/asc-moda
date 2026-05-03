@@ -9,9 +9,12 @@ import com.ascmoda.customer.controller.dto.CustomerResponse;
 import com.ascmoda.customer.controller.dto.CustomerSummaryResponse;
 import com.ascmoda.customer.controller.dto.UpdateCustomerAddressRequest;
 import com.ascmoda.customer.controller.dto.UpdateCustomerProfileRequest;
+import com.ascmoda.customer.domain.exception.BlockedCustomerOperationException;
 import com.ascmoda.customer.domain.exception.CustomerAddressNotFoundException;
 import com.ascmoda.customer.domain.exception.DuplicateEmailException;
+import com.ascmoda.customer.domain.exception.DuplicateExternalUserIdException;
 import com.ascmoda.customer.domain.exception.InactiveAddressOperationException;
+import com.ascmoda.customer.domain.exception.InvalidCustomerStatusTransitionException;
 import com.ascmoda.customer.domain.model.AddressType;
 import com.ascmoda.customer.domain.model.CustomerStatus;
 import org.junit.jupiter.api.Test;
@@ -84,6 +87,36 @@ class CustomerServiceIntegrationTest {
     }
 
     @Test
+    void createWithSameExternalUserIdAndEmailReturnsExistingCustomer() {
+        CustomerResponse first = createCustomer(
+                "external-idempotent@example.com",
+                "+905551110016",
+                "keycloak-idempotent-1"
+        );
+
+        CustomerResponse second = createCustomer(
+                "EXTERNAL-IDEMPOTENT@example.com",
+                "+905551110017",
+                "keycloak-idempotent-1"
+        );
+
+        assertThat(second.id()).isEqualTo(first.id());
+        assertThat(second.externalUserId()).isEqualTo("keycloak-idempotent-1");
+        assertThat(second.email()).isEqualTo("external-idempotent@example.com");
+    }
+
+    @Test
+    void rejectsDuplicateExternalUserIdWithDifferentEmail() {
+        createCustomer("external-duplicate@example.com", "+905551110018", "keycloak-duplicate-1");
+
+        assertThatThrownBy(() -> createCustomer(
+                "external-duplicate-other@example.com",
+                "+905551110019",
+                "keycloak-duplicate-1"
+        )).isInstanceOf(DuplicateExternalUserIdException.class);
+    }
+
+    @Test
     void updatesCustomerProfile() {
         CustomerResponse customer = createCustomer("profile@example.com", "+905551110003");
 
@@ -108,6 +141,37 @@ class CustomerServiceIntegrationTest {
         assertThat(updated.emailVerified()).isTrue();
         assertThat(updated.phoneVerified()).isTrue();
         assertThat(updated.marketingConsent()).isTrue();
+    }
+
+    @Test
+    void blockedCustomerProfileUpdateIsRejected() {
+        CustomerResponse customer = createCustomer("blocked-profile@example.com", "+905551110020");
+        customerService.changeStatus(customer.id(), new ChangeCustomerStatusRequest(CustomerStatus.BLOCKED));
+
+        assertThatThrownBy(() -> customerService.updateProfile(
+                customer.id(),
+                new UpdateCustomerProfileRequest(
+                        null,
+                        "blocked-profile-updated@example.com",
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null
+                )
+        )).isInstanceOf(BlockedCustomerOperationException.class);
+    }
+
+    @Test
+    void rejectsDirectBlockedToActiveStatusTransition() {
+        CustomerResponse customer = createCustomer("blocked-transition@example.com", "+905551110021");
+        customerService.changeStatus(customer.id(), new ChangeCustomerStatusRequest(CustomerStatus.BLOCKED));
+
+        assertThatThrownBy(() -> customerService.changeStatus(
+                customer.id(),
+                new ChangeCustomerStatusRequest(CustomerStatus.ACTIVE)
+        )).isInstanceOf(InvalidCustomerStatusTransitionException.class);
     }
 
     @Test
@@ -144,6 +208,46 @@ class CustomerServiceIntegrationTest {
         assertThat(updated.city()).isEqualTo("Ankara");
         assertThat(updated.district()).isEqualTo("Cankaya");
         assertThat(updated.defaultShipping()).isTrue();
+    }
+
+    @Test
+    void blockedCustomerAddressCreateIsRejected() {
+        CustomerResponse customer = createCustomer("blocked-address-create@example.com", "+905551110022");
+        customerService.changeStatus(customer.id(), new ChangeCustomerStatusRequest(CustomerStatus.BLOCKED));
+
+        assertThatThrownBy(() -> customerAddressService.addAddress(
+                customer.id(),
+                addressRequest("Blocked create", AddressType.SHIPPING, true, false)
+        )).isInstanceOf(BlockedCustomerOperationException.class);
+    }
+
+    @Test
+    void blockedCustomerAddressUpdateIsRejected() {
+        CustomerResponse customer = createCustomer("blocked-address-update@example.com", "+905551110023");
+        CustomerAddressResponse address = customerAddressService.addAddress(
+                customer.id(),
+                addressRequest("Blocked update", AddressType.SHIPPING, true, false)
+        );
+        customerService.changeStatus(customer.id(), new ChangeCustomerStatusRequest(CustomerStatus.BLOCKED));
+
+        assertThatThrownBy(() -> customerAddressService.updateAddress(
+                customer.id(),
+                address.id(),
+                new UpdateCustomerAddressRequest("Updated", null, null, null, null, null, null, null, null, null, null)
+        )).isInstanceOf(BlockedCustomerOperationException.class);
+    }
+
+    @Test
+    void blockedCustomerDefaultAddressSetIsRejected() {
+        CustomerResponse customer = createCustomer("blocked-default@example.com", "+905551110024");
+        CustomerAddressResponse address = customerAddressService.addAddress(
+                customer.id(),
+                addressRequest("Blocked default", AddressType.SHIPPING, true, false)
+        );
+        customerService.changeStatus(customer.id(), new ChangeCustomerStatusRequest(CustomerStatus.BLOCKED));
+
+        assertThatThrownBy(() -> customerAddressService.setDefaultShippingAddress(customer.id(), address.id()))
+                .isInstanceOf(BlockedCustomerOperationException.class);
     }
 
     @Test
@@ -218,12 +322,15 @@ class CustomerServiceIntegrationTest {
 
     @Test
     void supportsAdminFilteringAndPagination() {
-        CustomerResponse active = createCustomer("alice@example.com", "+905551110011");
+        CustomerResponse active = createCustomer("alice@example.com", "+905551110011", "admin-external-1");
         CustomerResponse passive = createCustomer("bob@example.com", "+905551110012");
         customerService.changeStatus(passive.id(), new ChangeCustomerStatusRequest(CustomerStatus.PASSIVE));
 
         Page<CustomerSummaryResponse> passivePage = customerService.listAdmin(
                 CustomerStatus.PASSIVE,
+                null,
+                null,
+                null,
                 null,
                 null,
                 null,
@@ -236,7 +343,32 @@ class CustomerServiceIntegrationTest {
                 null,
                 null,
                 null,
+                null,
+                null,
+                null,
                 PageRequest.of(0, 1, Sort.by("createdAt").descending())
+        );
+        Page<CustomerSummaryResponse> nameAndExternalPage = customerService.listAdmin(
+                null,
+                null,
+                null,
+                "ada",
+                "love",
+                null,
+                null,
+                null,
+                PageRequest.of(0, 20, Sort.by("createdAt").descending())
+        );
+        Page<CustomerSummaryResponse> externalPage = customerService.listAdmin(
+                null,
+                null,
+                null,
+                null,
+                null,
+                "admin-external",
+                null,
+                null,
+                PageRequest.of(0, 10, Sort.by("createdAt").descending())
         );
 
         assertThat(passivePage.getTotalElements()).isEqualTo(1);
@@ -244,11 +376,14 @@ class CustomerServiceIntegrationTest {
         assertThat(emailPage.getTotalElements()).isEqualTo(1);
         assertThat(emailPage.getContent().get(0).customerId()).isEqualTo(active.id());
         assertThat(emailPage.getSize()).isEqualTo(1);
+        assertThat(nameAndExternalPage.getTotalElements()).isGreaterThanOrEqualTo(2);
+        assertThat(externalPage.getTotalElements()).isEqualTo(1);
+        assertThat(externalPage.getContent().get(0).externalUserId()).isEqualTo("admin-external-1");
     }
 
     @Test
     void returnsInternalSummaryAndDefaultAddresses() {
-        CustomerResponse customer = createCustomer("internal@example.com", "+905551110013");
+        CustomerResponse customer = createCustomer("internal@example.com", "+905551110013", "keycloak-internal-1");
         CustomerAddressResponse shipping = customerAddressService.addAddress(
                 customer.id(),
                 addressRequest("Shipping", AddressType.SHIPPING, true, false)
@@ -262,11 +397,40 @@ class CustomerServiceIntegrationTest {
         CustomerDefaultAddressesResponse defaults = customerAddressService.getDefaultAddresses(customer.id());
 
         assertThat(summary.customerId()).isEqualTo(customer.id());
+        assertThat(summary.externalUserId()).isEqualTo("keycloak-internal-1");
         assertThat(summary.fullName()).isEqualTo("Ada Lovelace");
+        assertThat(summary.displayName()).isEqualTo("Ada Lovelace");
+        assertThat(summary.emailVerified()).isFalse();
+        assertThat(summary.phoneVerified()).isFalse();
+        assertThat(summary.hasDefaultShippingAddress()).isTrue();
+        assertThat(summary.hasDefaultBillingAddress()).isTrue();
         assertThat(summary.defaultShippingAddress().id()).isEqualTo(shipping.id());
         assertThat(summary.defaultBillingAddress().id()).isEqualTo(billing.id());
+        assertThat(defaults.externalUserId()).isEqualTo("keycloak-internal-1");
+        assertThat(defaults.fullName()).isEqualTo("Ada Lovelace");
+        assertThat(defaults.hasActiveAddress()).isTrue();
+        assertThat(defaults.hasDefaultShippingAddress()).isTrue();
+        assertThat(defaults.hasDefaultBillingAddress()).isTrue();
         assertThat(defaults.defaultShippingAddress().id()).isEqualTo(shipping.id());
         assertThat(defaults.defaultBillingAddress().id()).isEqualTo(billing.id());
+    }
+
+    @Test
+    void deactivatingDefaultAddressClearsDefaultFlags() {
+        CustomerResponse customer = createCustomer("default-cleared@example.com", "+905551110025");
+        CustomerAddressResponse address = customerAddressService.addAddress(
+                customer.id(),
+                addressRequest("Only address", AddressType.OTHER, true, true)
+        );
+
+        customerAddressService.deactivateAddress(customer.id(), address.id());
+        CustomerDefaultAddressesResponse defaults = customerAddressService.getDefaultAddresses(customer.id());
+
+        assertThat(defaults.hasActiveAddress()).isFalse();
+        assertThat(defaults.hasDefaultShippingAddress()).isFalse();
+        assertThat(defaults.hasDefaultBillingAddress()).isFalse();
+        assertThat(defaults.defaultShippingAddress()).isNull();
+        assertThat(defaults.defaultBillingAddress()).isNull();
     }
 
     @Test
@@ -283,8 +447,12 @@ class CustomerServiceIntegrationTest {
     }
 
     private CustomerResponse createCustomer(String email, String phoneNumber) {
+        return createCustomer(email, phoneNumber, null);
+    }
+
+    private CustomerResponse createCustomer(String email, String phoneNumber, String externalUserId) {
         return customerService.createCustomer(new CreateCustomerRequest(
-                null,
+                externalUserId,
                 email,
                 phoneNumber,
                 "Ada",

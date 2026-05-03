@@ -1,5 +1,6 @@
 package com.ascmoda.customer.controller.error;
 
+import com.ascmoda.customer.domain.exception.BlockedCustomerOperationException;
 import com.ascmoda.customer.domain.exception.CustomerAddressNotFoundException;
 import com.ascmoda.customer.domain.exception.CustomerNotFoundException;
 import com.ascmoda.customer.domain.exception.DuplicateEmailException;
@@ -8,6 +9,8 @@ import com.ascmoda.customer.domain.exception.IllegalBusinessStateException;
 import com.ascmoda.customer.domain.exception.InactiveAddressOperationException;
 import com.ascmoda.customer.domain.exception.InvalidCustomerStatusTransitionException;
 import com.ascmoda.customer.domain.exception.InvalidDefaultAddressOperationException;
+import com.ascmoda.customer.domain.exception.NoActiveAddressException;
+import com.ascmoda.customer.domain.exception.NoDefaultAddressException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -58,10 +61,47 @@ public class GlobalExceptionHandler {
                 "Customer data was modified concurrently", request, List.of());
     }
 
+    @ExceptionHandler(BlockedCustomerOperationException.class)
+    public ResponseEntity<ProblemDetail> handleBlockedCustomer(BlockedCustomerOperationException ex,
+                                                               HttpServletRequest request) {
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, "BLOCKED_CUSTOMER_OPERATION_NOT_ALLOWED",
+                ex.getMessage(), request, List.of());
+    }
+
+    @ExceptionHandler(InvalidCustomerStatusTransitionException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidStatusTransition(InvalidCustomerStatusTransitionException ex,
+                                                                       HttpServletRequest request) {
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_CUSTOMER_STATUS_TRANSITION",
+                ex.getMessage(), request, List.of());
+    }
+
+    @ExceptionHandler(InvalidDefaultAddressOperationException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidDefaultAddress(InvalidDefaultAddressOperationException ex,
+                                                                     HttpServletRequest request) {
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_DEFAULT_ADDRESS_OPERATION",
+                ex.getMessage(), request, List.of());
+    }
+
+    @ExceptionHandler(InactiveAddressOperationException.class)
+    public ResponseEntity<ProblemDetail> handleInactiveAddress(InactiveAddressOperationException ex,
+                                                               HttpServletRequest request) {
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, "INACTIVE_ADDRESS_OPERATION",
+                ex.getMessage(), request, List.of());
+    }
+
+    @ExceptionHandler(NoActiveAddressException.class)
+    public ResponseEntity<ProblemDetail> handleNoActiveAddress(NoActiveAddressException ex,
+                                                               HttpServletRequest request) {
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, "NO_ACTIVE_ADDRESS", ex.getMessage(), request, List.of());
+    }
+
+    @ExceptionHandler(NoDefaultAddressException.class)
+    public ResponseEntity<ProblemDetail> handleNoDefaultAddress(NoDefaultAddressException ex,
+                                                                HttpServletRequest request) {
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, "NO_DEFAULT_ADDRESS", ex.getMessage(), request, List.of());
+    }
+
     @ExceptionHandler({
-            InvalidCustomerStatusTransitionException.class,
-            InvalidDefaultAddressOperationException.class,
-            InactiveAddressOperationException.class,
             IllegalBusinessStateException.class,
             IllegalStateException.class
     })
@@ -92,7 +132,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ProblemDetail> handleDataIntegrity(DataIntegrityViolationException ex,
                                                              HttpServletRequest request) {
-        return build(HttpStatus.CONFLICT, "DATA_INTEGRITY_VIOLATION", dataIntegrityMessage(ex), request, List.of());
+        ConstraintError error = constraintError(ex);
+        return build(HttpStatus.CONFLICT, error.errorCode(), error.message(), request, List.of());
     }
 
     private FieldValidationError toFieldError(FieldError error) {
@@ -113,26 +154,29 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(status).body(problem);
     }
 
-    private String dataIntegrityMessage(DataIntegrityViolationException ex) {
+    private ConstraintError constraintError(DataIntegrityViolationException ex) {
         String message = ex.getMostSpecificCause().getMessage();
         String normalizedMessage = message == null ? "" : message.toLowerCase();
 
         if (normalizedMessage.contains("ux_customers_email")) {
-            return "Customer email already exists";
+            return new ConstraintError("DUPLICATE_EMAIL", "Customer email already exists");
         }
         if (normalizedMessage.contains("ux_customers_external_user_id")) {
-            return "Customer external user id already exists";
+            return new ConstraintError("DUPLICATE_EXTERNAL_USER_ID", "Customer external user id already exists");
         }
         if (normalizedMessage.contains("ux_customer_addresses_default_shipping")) {
-            return "Customer already has a default shipping address";
+            return new ConstraintError("DEFAULT_ADDRESS_CONFLICT", "Customer already has a default shipping address");
         }
         if (normalizedMessage.contains("ux_customer_addresses_default_billing")) {
-            return "Customer already has a default billing address";
+            return new ConstraintError("DEFAULT_ADDRESS_CONFLICT", "Customer already has a default billing address");
         }
         if (normalizedMessage.contains("ck_customer_addresses_inactive_not_default")) {
-            return "Inactive address cannot be default address";
+            return new ConstraintError("INACTIVE_ADDRESS_OPERATION", "Inactive address cannot be default address");
         }
 
-        return "Customer data constraint violation";
+        return new ConstraintError("DATA_INTEGRITY_VIOLATION", "Customer data constraint violation");
+    }
+
+    private record ConstraintError(String errorCode, String message) {
     }
 }
