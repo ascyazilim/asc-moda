@@ -10,6 +10,7 @@ import com.ascmoda.cart.api.dto.ToggleCartItemSelectionRequest;
 import com.ascmoda.cart.api.dto.ToggleCartItemsSelectionRequest;
 import com.ascmoda.cart.api.dto.UpdateCartItemQuantityRequest;
 import com.ascmoda.cart.application.service.CartService;
+import com.ascmoda.cart.security.CartCustomerAccessGuard;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,66 +28,79 @@ import java.util.UUID;
 public class CustomerCartController {
 
     private final CartService cartService;
+    private final CartCustomerAccessGuard customerAccessGuard;
 
-    public CustomerCartController(CartService cartService) {
+    public CustomerCartController(CartService cartService, CartCustomerAccessGuard customerAccessGuard) {
         this.cartService = cartService;
+        this.customerAccessGuard = customerAccessGuard;
     }
 
     @GetMapping("/{customerId}")
     public CartResponse getOrCreateActiveCart(@PathVariable UUID customerId) {
+        customerAccessGuard.assertCanAccessCustomer(customerId);
         return cartService.getOrCreateActiveCart(customerId);
     }
 
     @GetMapping("/{customerId}/summary")
     public CartSummaryResponse getSummary(@PathVariable UUID customerId) {
+        customerAccessGuard.assertCanAccessCustomer(customerId);
         return cartService.getSummary(customerId);
     }
 
     @PostMapping("/{customerId}/items")
     public CartResponse addItem(@PathVariable UUID customerId, @Valid @RequestBody AddCartItemRequest request) {
+        customerAccessGuard.assertCanAccessCustomer(customerId);
         return cartService.addItem(customerId, request);
     }
 
     @PatchMapping("/{customerId}/items/{itemId}/quantity")
     public CartResponse updateItemQuantity(@PathVariable UUID customerId, @PathVariable UUID itemId,
                                            @Valid @RequestBody UpdateCartItemQuantityRequest request) {
+        customerAccessGuard.assertCanAccessCustomer(customerId);
         return cartService.updateItemQuantity(customerId, itemId, request);
     }
 
     @PatchMapping("/{customerId}/items/{itemId}/selection")
     public CartResponse toggleItemSelection(@PathVariable UUID customerId, @PathVariable UUID itemId,
                                             @Valid @RequestBody ToggleCartItemSelectionRequest request) {
+        customerAccessGuard.assertCanAccessCustomer(customerId);
         return cartService.toggleItemSelection(customerId, itemId, request);
     }
 
     @PatchMapping("/{customerId}/items/selection-all")
     public CartResponse toggleAllItemsSelection(@PathVariable UUID customerId,
                                                 @Valid @RequestBody ToggleCartItemsSelectionRequest request) {
+        customerAccessGuard.assertCanAccessCustomer(customerId);
         return cartService.toggleAllItemsSelection(customerId, request);
     }
 
     @DeleteMapping("/{customerId}/items/{itemId}")
     public CartResponse removeItem(@PathVariable UUID customerId, @PathVariable UUID itemId) {
+        customerAccessGuard.assertCanAccessCustomer(customerId);
         return cartService.removeItem(customerId, itemId);
     }
 
     @DeleteMapping("/{customerId}/items")
     public CartResponse clearCart(@PathVariable UUID customerId) {
+        customerAccessGuard.assertCanAccessCustomer(customerId);
         return cartService.clearCart(customerId);
     }
 
     @PostMapping("/{customerId}/refresh")
     public CartRefreshResponse refreshCart(@PathVariable UUID customerId) {
+        customerAccessGuard.assertCanAccessCustomer(customerId);
         return cartService.refresh(customerId);
     }
 
     @GetMapping("/{customerId}/validate")
     public CartValidationResponse validateCart(@PathVariable UUID customerId) {
+        customerAccessGuard.assertCanAccessCustomer(customerId);
         return cartService.validateActiveCart(customerId);
     }
 
     @GetMapping("/{customerId}/checkout-preview")
     public CheckoutPreviewResponse getCheckoutPreview(@PathVariable UUID customerId) {
+        customerAccessGuard.assertCanAccessCustomer(customerId);
         return cartService.getCheckoutPreview(customerId);
     }
 }

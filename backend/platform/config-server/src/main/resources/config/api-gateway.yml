@@ -2,6 +2,11 @@ server:
   port: ${API_GATEWAY_PORT:8080}
 
 spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: "${KEYCLOAK_ISSUER_URI:http://localhost:8081/realms/asc-moda}"
   cloud:
     gateway:
       server:
@@ -22,6 +27,10 @@ spring:
               uri: lb://cart-service
               predicates:
                 - Path=/api/v1/carts/**,/api/v1/admin/carts,/api/v1/admin/carts/**,/api/v1/internal/carts/**
+            - id: customer-service
+              uri: lb://customer-service
+              predicates:
+                - Path=/api/v1/customers/**,/api/v1/admin/customers,/api/v1/admin/customers/**,/api/v1/internal/customers/**
             - id: order-service
               uri: lb://order-service
               predicates:

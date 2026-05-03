@@ -2,6 +2,9 @@ server:
   port: ${NOTIFICATION_SERVICE_PORT:0}
 
 ascmoda:
+  security:
+    service-client:
+      registration-id: ascmoda-service
   notification:
     config-source: config-server
     sender:
@@ -15,6 +18,11 @@ ascmoda:
 spring:
   application:
     name: notification-service
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: "${KEYCLOAK_ISSUER_URI:http://localhost:8081/realms/asc-moda}"
   datasource:
     url: "${NOTIFICATION_DB_URL:jdbc:postgresql://localhost:15432/asc_moda_notification}"
     username: ${NOTIFICATION_DB_USERNAME:${POSTGRES_USER:asc_moda}}

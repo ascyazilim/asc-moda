@@ -18,6 +18,7 @@
         <module>platform/api-gateway</module>
         <module>shared/shared-kernel</module>
         <module>shared/shared-observability</module>
+        <module>shared/shared-security</module>
         <module>shared/shared-test</module>
         <module>services/customer-service</module>
         <module>services/catalog-service</module>
@@ -53,6 +54,11 @@
             <dependency>
                 <groupId>com.ascmoda</groupId>
                 <artifactId>shared-observability</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.ascmoda</groupId>
+                <artifactId>shared-security</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

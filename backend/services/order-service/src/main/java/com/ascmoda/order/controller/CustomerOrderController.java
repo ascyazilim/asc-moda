@@ -5,6 +5,7 @@ import com.ascmoda.order.controller.dto.CreateOrderRequest;
 import com.ascmoda.order.controller.dto.OrderResponse;
 import com.ascmoda.order.controller.dto.OrderSummaryResponse;
 import com.ascmoda.order.controller.dto.PageResponse;
+import com.ascmoda.order.security.OrderCustomerAccessGuard;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -25,13 +26,16 @@ import java.util.UUID;
 public class CustomerOrderController {
 
     private final OrderService orderService;
+    private final OrderCustomerAccessGuard customerAccessGuard;
 
-    public CustomerOrderController(OrderService orderService) {
+    public CustomerOrderController(OrderService orderService, OrderCustomerAccessGuard customerAccessGuard) {
         this.orderService = orderService;
+        this.customerAccessGuard = customerAccessGuard;
     }
 
     @PostMapping
     public ResponseEntity<OrderResponse> create(@Valid @RequestBody CreateOrderRequest request) {
+        customerAccessGuard.assertCanAccessCustomer(request.customerId());
         OrderResponse response = orderService.createOrder(request);
         return ResponseEntity
                 .created(URI.create("/api/v1/orders/" + response.id()))
@@ -40,7 +44,9 @@ public class CustomerOrderController {
 
     @GetMapping("/{orderId}")
     public OrderResponse get(@PathVariable UUID orderId) {
-        return orderService.getOrder(orderId);
+        OrderResponse response = orderService.getOrder(orderId);
+        customerAccessGuard.assertCanAccessCustomer(response.customerId());
+        return response;
     }
 
     @GetMapping("/customer/{customerId}")
@@ -48,6 +54,7 @@ public class CustomerOrderController {
             @PathVariable UUID customerId,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
+        customerAccessGuard.assertCanAccessCustomer(customerId);
         return orderService.listCustomerOrders(customerId, pageable);
     }
 }

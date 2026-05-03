@@ -2,6 +2,9 @@ server:
   port: ${SEARCH_SERVICE_PORT:0}
 
 ascmoda:
+  security:
+    service-client:
+      registration-id: ascmoda-service
   search:
     config-source: config-server
     index:
@@ -10,6 +13,11 @@ ascmoda:
 spring:
   application:
     name: search-service
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: "${KEYCLOAK_ISSUER_URI:http://localhost:8081/realms/asc-moda}"
   datasource:
     url: "${SEARCH_DB_URL:jdbc:postgresql://localhost:15432/asc_moda_search}"
     username: ${SEARCH_DB_USERNAME:${POSTGRES_USER:asc_moda}}

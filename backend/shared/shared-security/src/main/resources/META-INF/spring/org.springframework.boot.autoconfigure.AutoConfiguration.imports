@@ -1,0 +1,2 @@
+com.ascmoda.shared.security.auth.AscModaSecurityAutoConfiguration
+com.ascmoda.shared.security.feign.InternalFeignOAuth2AutoConfiguration

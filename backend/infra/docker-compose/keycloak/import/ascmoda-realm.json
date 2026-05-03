@@ -1,0 +1,270 @@
+{
+  "realm": "asc-moda",
+  "enabled": true,
+  "displayName": "asc-moda",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "roles": {
+    "realm": [
+      { "name": "ROLE_CUSTOMER", "description": "Authenticated customer users" },
+      { "name": "ROLE_ADMIN", "description": "Administrative users" },
+      { "name": "ROLE_SUPPORT", "description": "Customer support users" },
+      { "name": "ROLE_OPERATIONS", "description": "Operations users" },
+      { "name": "ROLE_SERVICE", "description": "Service-to-service clients" }
+    ],
+    "client": {
+      "catalog-service": [
+        { "name": "catalog:read" },
+        { "name": "catalog:write" }
+      ],
+      "inventory-service": [
+        { "name": "inventory:read" },
+        { "name": "inventory:adjust" },
+        { "name": "inventory:reserve" },
+        { "name": "inventory:consume" }
+      ],
+      "order-service": [
+        { "name": "order:read" },
+        { "name": "order:create" },
+        { "name": "order:confirm" },
+        { "name": "order:cancel" }
+      ],
+      "customer-service": [
+        { "name": "customer:read" },
+        { "name": "customer:update" },
+        { "name": "customer:manage" }
+      ],
+      "notification-service": [
+        { "name": "notification:read" },
+        { "name": "notification:retry" }
+      ],
+      "search-service": [
+        { "name": "search:reindex" }
+      ]
+    }
+  },
+  "clients": [
+    {
+      "clientId": "ascmoda-frontend",
+      "name": "ascmoda Frontend",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://localhost:3000/*",
+        "http://localhost:5173/*"
+      ],
+      "webOrigins": [
+        "http://localhost:3000",
+        "http://localhost:5173"
+      ]
+    },
+    {
+      "clientId": "api-gateway",
+      "name": "API Gateway",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "api-gateway-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false
+    },
+    {
+      "clientId": "catalog-service",
+      "name": "Catalog Service",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "catalog-service-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false
+    },
+    {
+      "clientId": "inventory-service",
+      "name": "Inventory Service",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "inventory-service-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false
+    },
+    {
+      "clientId": "cart-service",
+      "name": "Cart Service",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "cart-service-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false
+    },
+    {
+      "clientId": "order-service",
+      "name": "Order Service",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "order-service-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false
+    },
+    {
+      "clientId": "customer-service",
+      "name": "Customer Service",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "customer-service-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false
+    },
+    {
+      "clientId": "notification-service",
+      "name": "Notification Service",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "notification-service-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false
+    },
+    {
+      "clientId": "search-service",
+      "name": "Search Service",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "search-service-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false
+    }
+  ],
+  "groups": [
+    {
+      "name": "customers",
+      "path": "/customers",
+      "realmRoles": ["ROLE_CUSTOMER"],
+      "clientRoles": {
+        "customer-service": ["customer:read", "customer:update"],
+        "order-service": ["order:read", "order:create"],
+        "catalog-service": ["catalog:read"]
+      }
+    },
+    {
+      "name": "admins",
+      "path": "/admins",
+      "realmRoles": ["ROLE_ADMIN"],
+      "clientRoles": {
+        "catalog-service": ["catalog:read", "catalog:write"],
+        "inventory-service": ["inventory:read", "inventory:adjust", "inventory:reserve", "inventory:consume"],
+        "order-service": ["order:read", "order:create", "order:confirm", "order:cancel"],
+        "customer-service": ["customer:read", "customer:update", "customer:manage"],
+        "notification-service": ["notification:read", "notification:retry"],
+        "search-service": ["search:reindex"]
+      }
+    },
+    {
+      "name": "support",
+      "path": "/support",
+      "realmRoles": ["ROLE_SUPPORT"],
+      "clientRoles": {
+        "order-service": ["order:read"],
+        "customer-service": ["customer:read"],
+        "notification-service": ["notification:read"]
+      }
+    },
+    {
+      "name": "operations",
+      "path": "/operations",
+      "realmRoles": ["ROLE_OPERATIONS"],
+      "clientRoles": {
+        "inventory-service": ["inventory:read", "inventory:adjust"],
+        "catalog-service": ["catalog:read", "catalog:write"],
+        "order-service": ["order:read", "order:confirm", "order:cancel"],
+        "search-service": ["search:reindex"]
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "service-account-api-gateway",
+      "enabled": true,
+      "serviceAccountClientId": "api-gateway",
+      "realmRoles": ["ROLE_SERVICE"]
+    },
+    {
+      "username": "service-account-catalog-service",
+      "enabled": true,
+      "serviceAccountClientId": "catalog-service",
+      "realmRoles": ["ROLE_SERVICE"],
+      "clientRoles": {
+        "catalog-service": ["catalog:read", "catalog:write"]
+      }
+    },
+    {
+      "username": "service-account-inventory-service",
+      "enabled": true,
+      "serviceAccountClientId": "inventory-service",
+      "realmRoles": ["ROLE_SERVICE"],
+      "clientRoles": {
+        "catalog-service": ["catalog:read"],
+        "inventory-service": ["inventory:read", "inventory:adjust", "inventory:reserve", "inventory:consume"]
+      }
+    },
+    {
+      "username": "service-account-cart-service",
+      "enabled": true,
+      "serviceAccountClientId": "cart-service",
+      "realmRoles": ["ROLE_SERVICE"],
+      "clientRoles": {
+        "catalog-service": ["catalog:read"],
+        "inventory-service": ["inventory:read"],
+        "customer-service": ["customer:read"]
+      }
+    },
+    {
+      "username": "service-account-order-service",
+      "enabled": true,
+      "serviceAccountClientId": "order-service",
+      "realmRoles": ["ROLE_SERVICE"],
+      "clientRoles": {
+        "inventory-service": ["inventory:reserve", "inventory:consume"],
+        "order-service": ["order:read", "order:create", "order:confirm", "order:cancel"],
+        "customer-service": ["customer:read"]
+      }
+    },
+    {
+      "username": "service-account-customer-service",
+      "enabled": true,
+      "serviceAccountClientId": "customer-service",
+      "realmRoles": ["ROLE_SERVICE"],
+      "clientRoles": {
+        "customer-service": ["customer:read", "customer:update", "customer:manage"]
+      }
+    },
+    {
+      "username": "service-account-notification-service",
+      "enabled": true,
+      "serviceAccountClientId": "notification-service",
+      "realmRoles": ["ROLE_SERVICE"],
+      "clientRoles": {
+        "notification-service": ["notification:read", "notification:retry"],
+        "customer-service": ["customer:read"]
+      }
+    },
+    {
+      "username": "service-account-search-service",
+      "enabled": true,
+      "serviceAccountClientId": "search-service",
+      "realmRoles": ["ROLE_SERVICE"],
+      "clientRoles": {
+        "search-service": ["search:reindex"],
+        "catalog-service": ["catalog:read"]
+      }
+    }
+  ]
+}

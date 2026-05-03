@@ -2,12 +2,30 @@ server:
   port: ${CART_SERVICE_PORT:0}
 
 ascmoda:
+  security:
+    service-client:
+      registration-id: ascmoda-service
   cart:
     config-source: config-server
 
 spring:
   application:
     name: cart-service
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: "${KEYCLOAK_ISSUER_URI:http://localhost:8081/realms/asc-moda}"
+      client:
+        provider:
+          keycloak:
+            token-uri: "${KEYCLOAK_TOKEN_URI:http://localhost:8081/realms/asc-moda/protocol/openid-connect/token}"
+        registration:
+          ascmoda-service:
+            provider: keycloak
+            authorization-grant-type: client_credentials
+            client-id: ${CART_SERVICE_OAUTH2_CLIENT_ID:cart-service}
+            client-secret: ${CART_SERVICE_OAUTH2_CLIENT_SECRET:cart-service-secret}
   cloud:
     openfeign:
       client:

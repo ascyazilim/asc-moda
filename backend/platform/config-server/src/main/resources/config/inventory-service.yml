@@ -2,6 +2,9 @@ server:
   port: ${INVENTORY_SERVICE_PORT:0}
 
 ascmoda:
+  security:
+    service-client:
+      registration-id: ascmoda-service
   inventory:
     config-source: config-server
     outbox:
@@ -13,6 +16,21 @@ ascmoda:
 spring:
   application:
     name: inventory-service
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: "${KEYCLOAK_ISSUER_URI:http://localhost:8081/realms/asc-moda}"
+      client:
+        provider:
+          keycloak:
+            token-uri: "${KEYCLOAK_TOKEN_URI:http://localhost:8081/realms/asc-moda/protocol/openid-connect/token}"
+        registration:
+          ascmoda-service:
+            provider: keycloak
+            authorization-grant-type: client_credentials
+            client-id: ${INVENTORY_SERVICE_OAUTH2_CLIENT_ID:inventory-service}
+            client-secret: ${INVENTORY_SERVICE_OAUTH2_CLIENT_SECRET:inventory-service-secret}
   cloud:
     openfeign:
       client:

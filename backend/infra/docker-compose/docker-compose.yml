@@ -80,7 +80,7 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
     container_name: asc-moda-keycloak
-    command: start-dev
+    command: start-dev --import-realm
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
@@ -88,6 +88,7 @@ services:
       - "8081:8080"
     volumes:
       - keycloak-data:/opt/keycloak/data
+      - ./keycloak/import:/opt/keycloak/data/import:ro
 
 volumes:
   postgres-data:
