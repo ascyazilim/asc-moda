@@ -87,7 +87,11 @@ export function ProductCard({ product }: ProductCardProps) {
           >
             {product.name}
           </Typography>
-          <PriceDisplay price={product.price} compareAtPrice={product.compareAtPrice} />
+          <PriceDisplay
+            price={product.price}
+            maxPrice={product.maxPrice}
+            compareAtPrice={product.compareAtPrice}
+          />
           <Button
             component={RouterLink}
             to={`/products/${product.slug}`}
@@ -103,4 +107,3 @@ export function ProductCard({ product }: ProductCardProps) {
     </Card>
   );
 }
-

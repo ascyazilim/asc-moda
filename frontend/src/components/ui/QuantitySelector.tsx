@@ -9,6 +9,7 @@ type QuantitySelectorProps = {
   onChange: (value: number) => void;
   min?: number;
   max?: number;
+  disabled?: boolean;
 };
 
 export function QuantitySelector({
@@ -16,6 +17,7 @@ export function QuantitySelector({
   onChange,
   min = 1,
   max = 10,
+  disabled = false,
 }: QuantitySelectorProps) {
   const update = (nextValue: number) => {
     onChange(clampQuantity(nextValue, min, max));
@@ -38,7 +40,7 @@ export function QuantitySelector({
         aria-label="Adedi azalt"
         size="small"
         onClick={() => update(value - 1)}
-        disabled={value <= min}
+        disabled={disabled || value <= min}
         sx={{ mx: 0.5 }}
       >
         <RemoveIcon fontSize="small" />
@@ -57,7 +59,7 @@ export function QuantitySelector({
         aria-label="Adedi artır"
         size="small"
         onClick={() => update(value + 1)}
-        disabled={value >= max}
+        disabled={disabled || value >= max}
         sx={{ mx: 0.5 }}
       >
         <AddIcon fontSize="small" />
@@ -65,4 +67,3 @@ export function QuantitySelector({
     </Stack>
   );
 }
-

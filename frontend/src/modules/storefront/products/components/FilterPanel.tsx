@@ -15,20 +15,20 @@ import {
   Typography,
 } from '@mui/material';
 
-import { ProductCategory, ProductFilters } from '../../../../types/product';
+import { Category, ProductFilters } from '../../../../types/product';
 import { formatCurrency } from '../../../../utils/formatters';
-import { storefrontCategories } from '../../mock/storefrontData';
 
 const colorOptions = ['Vizon', 'Ivory', 'Moka', 'Krem', 'Bej', 'Sage', 'Nude'];
 const sizeOptions = ['Standart', '36', '38', '40', '42', '44', 'S', 'M', 'L', 'XL'];
 
 type FilterPanelProps = {
   filters: ProductFilters;
+  categories: Category[];
   onChange: (filters: ProductFilters) => void;
   onReset: () => void;
 };
 
-export function FilterPanel({ filters, onChange, onReset }: FilterPanelProps) {
+export function FilterPanel({ filters, categories, onChange, onReset }: FilterPanelProps) {
   const priceRange = filters.priceRange ?? [0, 4000];
 
   const updateFilter = (patch: ProductFilters) => {
@@ -63,18 +63,18 @@ export function FilterPanel({ filters, onChange, onReset }: FilterPanelProps) {
       <FormControl>
         <FormLabel>Kategori</FormLabel>
         <RadioGroup
-          value={filters.category ?? 'all'}
+          value={filters.categorySlug ?? 'all'}
           onChange={(event) =>
             updateFilter({
-              category: event.target.value as ProductCategory | 'all',
+              categorySlug: event.target.value,
             })
           }
         >
           <FormControlLabel value="all" control={<Radio />} label="Tüm Ürünler" />
-          {storefrontCategories.map((category) => (
+          {categories.map((category) => (
             <FormControlLabel
-              key={category.id}
-              value={category.id}
+              key={category.slug}
+              value={category.slug}
               control={<Radio />}
               label={category.title}
             />
@@ -149,4 +149,3 @@ export function FilterPanel({ filters, onChange, onReset }: FilterPanelProps) {
     </Stack>
   );
 }
-

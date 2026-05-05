@@ -1,13 +1,23 @@
 import axios, { AxiosError } from 'axios';
 
-const baseURL = import.meta.env.VITE_API_BASE_URL ?? '/api';
+import { apiConfig } from './config';
 
 export const apiClient = axios.create({
-  baseURL,
+  baseURL: apiConfig.baseUrl,
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
   },
+});
+
+apiClient.interceptors.request.use((config) => {
+  const token = window.localStorage.getItem('asc_moda_access_token');
+
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+
+  return config;
 });
 
 export type ApiError = {
@@ -20,6 +30,8 @@ export function normalizeApiError(error: unknown): ApiError {
     return {
       message:
         error.response?.data?.message ??
+        error.response?.data?.detail ??
+        error.response?.data?.title ??
         error.message ??
         'Beklenmeyen bir servis hatası oluştu.',
       status: error.response?.status,
@@ -36,4 +48,3 @@ export function normalizeApiError(error: unknown): ApiError {
     message: 'Beklenmeyen bir hata oluştu.',
   };
 }
-

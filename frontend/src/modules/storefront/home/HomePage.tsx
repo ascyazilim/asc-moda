@@ -22,7 +22,12 @@ import { PageContainer } from '../../../components/common/PageContainer';
 import { SectionHeader } from '../../../components/common/SectionHeader';
 import { CategoryCard } from '../../../components/ui/CategoryCard';
 import { ProductCard } from '../../../components/ui/ProductCard';
-import { useFeaturedProducts, useNewArrivals } from '../../../hooks/useStorefrontQueries';
+import {
+  useCategories,
+  useFeaturedProducts,
+  useNewArrivals,
+} from '../../../hooks/useStorefrontQueries';
+import { Product } from '../../../types/product';
 import {
   heroImage,
   storefrontCategories,
@@ -35,8 +40,10 @@ const newsletterSchema = z.object({
 type NewsletterFormValues = z.infer<typeof newsletterSchema>;
 
 export function HomePage() {
+  const categoriesQuery = useCategories();
   const featuredQuery = useFeaturedProducts();
   const newArrivalsQuery = useNewArrivals();
+  const categories = categoriesQuery.data?.length ? categoriesQuery.data : storefrontCategories;
 
   return (
     <>
@@ -49,8 +56,8 @@ export function HomePage() {
           description="Başörtü, şal, elbise, etek ve dış giyim seçkisi butik bir ritimle bir araya geldi."
         />
         <Grid container spacing={{ xs: 2, md: 3 }}>
-          {storefrontCategories.map((category) => (
-            <Grid item xs={12} sm={6} lg={4} key={category.id}>
+          {categories.map((category) => (
+            <Grid item xs={12} sm={6} lg={4} key={category.slug}>
               <CategoryCard category={category} />
             </Grid>
           ))}
@@ -182,7 +189,7 @@ function HeroSection() {
   );
 }
 
-function ProductGrid({ products }: { products: NonNullable<ReturnType<typeof useFeaturedProducts>['data']> }) {
+function ProductGrid({ products }: { products: Product[] }) {
   return (
     <Grid container spacing={{ xs: 2, md: 3 }}>
       {products.map((product) => (
@@ -366,4 +373,3 @@ function CenteredLoader() {
     </Stack>
   );
 }
-

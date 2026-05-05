@@ -20,26 +20,29 @@ import {
   Toolbar,
   Typography,
 } from '@mui/material';
-import { useState } from 'react';
+import { ReactNode, useState } from 'react';
 import { Link as RouterLink, Outlet, useNavigate } from 'react-router-dom';
 
 import { SearchInput } from '../../components/ui/SearchInput';
+import { useCartSummary } from '../../hooks/useStorefrontQueries';
 import { ScrollToTop } from '../router/ScrollToTop';
 
 const navItems = [
   { label: 'Yeni Sezon', href: '/products?sort=newest' },
-  { label: 'Başörtü', href: '/products?category=basortu' },
-  { label: 'Şal', href: '/products?category=sal' },
-  { label: 'Elbise', href: '/products?category=elbise' },
-  { label: 'Etek', href: '/products?category=etek' },
-  { label: 'Bluz', href: '/products?category=bluz' },
-  { label: 'Dış Giyim', href: '/products?category=dis-giyim' },
+  { label: 'Başörtü', href: '/products?categorySlug=basortu' },
+  { label: 'Şal', href: '/products?categorySlug=sal' },
+  { label: 'Elbise', href: '/products?categorySlug=elbise' },
+  { label: 'Etek', href: '/products?categorySlug=etek' },
+  { label: 'Bluz', href: '/products?categorySlug=bluz' },
+  { label: 'Dış Giyim', href: '/products?categorySlug=dis-giyim' },
 ];
 
 export function StorefrontLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
+  const cartSummaryQuery = useCartSummary();
+  const cartQuantity = cartSummaryQuery.data?.totalQuantity ?? 0;
 
   const handleSearch = () => {
     const query = searchTerm.trim();
@@ -113,13 +116,13 @@ export function StorefrontLayout() {
 
             <Box sx={{ display: { xs: 'none', lg: 'block' }, flex: 1 }}>{navigation}</Box>
 
-            <Stack
-              direction="row"
-              spacing={0.5}
-              alignItems="center"
-              sx={{ ml: 'auto' }}
-            >
-              <Box sx={{ width: 280, display: { xs: 'none', md: 'block', lg: 'none', xl: 'block' } }}>
+            <Stack direction="row" spacing={0.5} alignItems="center" sx={{ ml: 'auto' }}>
+              <Box
+                sx={{
+                  width: 280,
+                  display: { xs: 'none', md: 'block', lg: 'none', xl: 'block' },
+                }}
+              >
                 <SearchInput
                   size="small"
                   value={searchTerm}
@@ -147,7 +150,7 @@ export function StorefrontLayout() {
                 <AccountCircleOutlinedIcon />
               </IconButton>
               <IconButton aria-label="Sepet" component={RouterLink} to="/cart">
-                <Badge badgeContent={2} color="secondary">
+                <Badge badgeContent={cartQuantity} color="secondary">
                   <ShoppingBagOutlinedIcon />
                 </Badge>
               </IconButton>
@@ -237,10 +240,16 @@ function Footer() {
               tesettür giyim deneyimi.
             </Typography>
             <Stack direction="row" spacing={1}>
-              <IconButton aria-label="Instagram" sx={{ color: 'inherit', border: 1, borderColor: 'rgba(255,255,255,0.18)' }}>
+              <IconButton
+                aria-label="Instagram"
+                sx={{ color: 'inherit', border: 1, borderColor: 'rgba(255,255,255,0.18)' }}
+              >
                 <InstagramIcon />
               </IconButton>
-              <IconButton aria-label="Pinterest" sx={{ color: 'inherit', border: 1, borderColor: 'rgba(255,255,255,0.18)' }}>
+              <IconButton
+                aria-label="Pinterest"
+                sx={{ color: 'inherit', border: 1, borderColor: 'rgba(255,255,255,0.18)' }}
+              >
                 <PinterestIcon />
               </IconButton>
             </Stack>
@@ -286,7 +295,7 @@ function Footer() {
 
 type FooterColumnProps = {
   title: string;
-  children: React.ReactNode;
+  children: ReactNode;
 };
 
 function FooterColumn({ title, children }: FooterColumnProps) {
@@ -299,3 +308,4 @@ function FooterColumn({ title, children }: FooterColumnProps) {
     </Stack>
   );
 }
+

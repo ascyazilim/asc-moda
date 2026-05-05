@@ -1,5 +1,6 @@
 import FilterListIcon from '@mui/icons-material/FilterList';
 import {
+  Alert,
   Box,
   Button,
   CircularProgress,
@@ -13,27 +14,28 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import { EmptyState } from '../../../components/common/EmptyState';
 import { PageContainer } from '../../../components/common/PageContainer';
 import { PageHero } from '../../../components/common/PageHero';
 import { ProductCard } from '../../../components/ui/ProductCard';
-import { useProducts } from '../../../hooks/useStorefrontQueries';
-import { Product, ProductCategory, ProductFilters, ProductSort } from '../../../types/product';
+import { useCategories, useProducts } from '../../../hooks/useStorefrontQueries';
+import { ProductFilters, ProductSort } from '../../../types/product';
 import { storefrontCategories } from '../mock/storefrontData';
 import { FilterPanel } from './components/FilterPanel';
 
 const pageSize = 8;
-const emptyProducts: Product[] = [];
 
 const defaultFilters: ProductFilters = {
-  category: 'all',
+  categorySlug: 'all',
   priceRange: [0, 4000],
   sort: 'featured',
   colors: [],
   sizes: [],
+  page: 1,
+  size: pageSize,
 };
 
 const sortOptions: Array<{ value: ProductSort; label: string }> = [
@@ -46,39 +48,40 @@ const sortOptions: Array<{ value: ProductSort; label: string }> = [
 export function ProductsPage() {
   const [searchParams] = useSearchParams();
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
-  const [page, setPage] = useState(1);
   const [filters, setFilters] = useState<ProductFilters>(() => ({
     ...defaultFilters,
-    category: getCategoryParam(searchParams.get('category')),
+    categorySlug: getCategoryParam(searchParams.get('categorySlug') ?? searchParams.get('category')),
     sort: getSortParam(searchParams.get('sort')),
+    page: getPageParam(searchParams.get('page')),
   }));
 
   useEffect(() => {
     setFilters((current) => ({
       ...current,
-      category: getCategoryParam(searchParams.get('category')),
+      categorySlug: getCategoryParam(searchParams.get('categorySlug') ?? searchParams.get('category')),
       sort: getSortParam(searchParams.get('sort')),
+      page: getPageParam(searchParams.get('page')),
     }));
-    setPage(1);
   }, [searchParams]);
 
+  const categoriesQuery = useCategories();
+  const categories = categoriesQuery.data?.length ? categoriesQuery.data : storefrontCategories;
   const productsQuery = useProducts(filters);
-  const products = productsQuery.data?.items ?? emptyProducts;
-  const pageCount = Math.max(1, Math.ceil(products.length / pageSize));
-  const paginatedProducts = useMemo(() => {
-    const start = (page - 1) * pageSize;
-
-    return products.slice(start, start + pageSize);
-  }, [page, products]);
+  const products = productsQuery.data?.items ?? [];
+  const total = productsQuery.data?.total ?? 0;
+  const page = filters.page ?? 1;
+  const pageCount = Math.max(1, productsQuery.data?.totalPages ?? 1);
 
   const handleFiltersChange = (nextFilters: ProductFilters) => {
-    setFilters(nextFilters);
-    setPage(1);
+    setFilters({
+      ...nextFilters,
+      page: 1,
+      size: pageSize,
+    });
   };
 
   const resetFilters = () => {
     setFilters(defaultFilters);
-    setPage(1);
   };
 
   return (
@@ -111,7 +114,12 @@ export function ProductsPage() {
               top: 104,
             }}
           >
-            <FilterPanel filters={filters} onChange={handleFiltersChange} onReset={resetFilters} />
+            <FilterPanel
+              filters={filters}
+              categories={categories}
+              onChange={handleFiltersChange}
+              onReset={resetFilters}
+            />
           </Box>
 
           <Stack spacing={3}>
@@ -122,7 +130,7 @@ export function ProductsPage() {
               alignItems={{ xs: 'stretch', sm: 'center' }}
             >
               <Typography color="text.secondary">
-                {products.length} ürün listeleniyor
+                {productsQuery.isLoading ? 'Ürünler yükleniyor' : `${total} ürün listeleniyor`}
               </Typography>
               <Stack direction="row" spacing={1.5}>
                 <Button
@@ -156,14 +164,20 @@ export function ProductsPage() {
               </Stack>
             </Stack>
 
+            {productsQuery.isError ? (
+              <Alert severity="error">
+                Ürünler yüklenemedi. Lütfen backend servisinin çalıştığından emin olun.
+              </Alert>
+            ) : null}
+
             {productsQuery.isLoading ? (
               <Stack alignItems="center" sx={{ py: 8 }}>
                 <CircularProgress color="secondary" />
               </Stack>
-            ) : paginatedProducts.length ? (
+            ) : products.length ? (
               <>
                 <Grid container spacing={{ xs: 2, md: 3 }}>
-                  {paginatedProducts.map((product) => (
+                  {products.map((product) => (
                     <Grid item xs={6} sm={4} lg={3} key={product.id}>
                       <ProductCard product={product} />
                     </Grid>
@@ -173,7 +187,12 @@ export function ProductsPage() {
                   <Pagination
                     count={pageCount}
                     page={page}
-                    onChange={(_, value) => setPage(value)}
+                    onChange={(_, value) =>
+                      setFilters((current) => ({
+                        ...current,
+                        page: value,
+                      }))
+                    }
                     color="primary"
                   />
                 </Stack>
@@ -182,7 +201,7 @@ export function ProductsPage() {
               <EmptyState
                 title="Bu filtrelerde ürün bulunamadı"
                 description="Kategori, renk veya fiyat aralığını sadeleştirerek tekrar deneyebilirsiniz."
-                actionLabel="Filtreleri Temizle"
+                actionLabel="Tüm Ürünler"
                 actionHref="/products"
               />
             )}
@@ -205,6 +224,7 @@ export function ProductsPage() {
       >
         <FilterPanel
           filters={filters}
+          categories={categories}
           onChange={handleFiltersChange}
           onReset={resetFilters}
         />
@@ -221,12 +241,8 @@ export function ProductsPage() {
   );
 }
 
-function getCategoryParam(value: string | null): ProductCategory | 'all' {
-  if (storefrontCategories.some((category) => category.id === value)) {
-    return value as ProductCategory;
-  }
-
-  return 'all';
+function getCategoryParam(value: string | null): string | 'all' {
+  return value && value.trim() ? value : 'all';
 }
 
 function getSortParam(value: string | null): ProductSort {
@@ -236,3 +252,10 @@ function getSortParam(value: string | null): ProductSort {
 
   return 'featured';
 }
+
+function getPageParam(value: string | null) {
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+}
+

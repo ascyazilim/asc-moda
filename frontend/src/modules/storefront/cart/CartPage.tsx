@@ -1,14 +1,16 @@
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import {
+  Alert,
   Box,
   Button,
+  CircularProgress,
   Divider,
   IconButton,
   Paper,
   Stack,
   Typography,
 } from '@mui/material';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 
 import { EmptyState } from '../../../components/common/EmptyState';
@@ -17,37 +19,38 @@ import { PageHero } from '../../../components/common/PageHero';
 import { CartSummaryCard } from '../../../components/ui/CartSummaryCard';
 import { PriceDisplay } from '../../../components/ui/PriceDisplay';
 import { QuantitySelector } from '../../../components/ui/QuantitySelector';
-import { CartItem } from '../../../types/cart';
+import {
+  useCart,
+  useCartSummary,
+  useClearCartMutation,
+  useRemoveCartItemMutation,
+  useUpdateCartItemQuantityMutation,
+} from '../../../hooks/useStorefrontQueries';
+import { CartItem, CartTotals } from '../../../types/cart';
 import { formatCurrency } from '../../../utils/formatters';
-import { mockCartItems } from '../mock/storefrontData';
 
 export function CartPage() {
-  const [items, setItems] = useState<CartItem[]>(mockCartItems);
-  const totals = useMemo(() => {
-    const subtotal = items.reduce(
-      (sum, item) => sum + item.product.price * item.quantity,
-      0,
-    );
-    const discount = subtotal > 2500 ? 150 : 0;
-    const shipping = subtotal > 1500 || subtotal === 0 ? 0 : 89;
+  const cartQuery = useCart();
+  const summaryQuery = useCartSummary();
+  const updateQuantityMutation = useUpdateCartItemQuantityMutation();
+  const removeItemMutation = useRemoveCartItemMutation();
+  const clearCartMutation = useClearCartMutation();
+  const items = cartQuery.data?.items ?? [];
+  const totals = useMemo<CartTotals>(() => {
+    const selectedTotal = summaryQuery.data?.selectedTotal ?? cartQuery.data?.selectedTotal ?? 0;
 
     return {
-      subtotal,
-      discount,
-      shipping,
-      total: Math.max(0, subtotal - discount + shipping),
+      subtotal: selectedTotal,
+      discount: 0,
+      shipping: selectedTotal > 0 ? 0 : 0,
+      total: selectedTotal,
     };
-  }, [items]);
+  }, [cartQuery.data?.selectedTotal, summaryQuery.data?.selectedTotal]);
 
-  const updateQuantity = (itemId: string, quantity: number) => {
-    setItems((current) =>
-      current.map((item) => (item.id === itemId ? { ...item, quantity } : item)),
-    );
-  };
-
-  const removeItem = (itemId: string) => {
-    setItems((current) => current.filter((item) => item.id !== itemId));
-  };
+  const isMutating =
+    updateQuantityMutation.isPending ||
+    removeItemMutation.isPending ||
+    clearCartMutation.isPending;
 
   return (
     <>
@@ -60,7 +63,19 @@ export function CartPage() {
       </PageContainer>
 
       <PageContainer>
-        {items.length ? (
+        {cartQuery.isLoading ? (
+          <Stack alignItems="center" sx={{ py: 8 }}>
+            <CircularProgress color="secondary" />
+          </Stack>
+        ) : null}
+
+        {cartQuery.isError ? (
+          <Alert severity="error" sx={{ mb: 3 }}>
+            Sepet bilgisi yüklenemedi. Demo müşteri kimliği ve cart servisinin çalıştığından emin olun.
+          </Alert>
+        ) : null}
+
+        {!cartQuery.isLoading && items.length ? (
           <Box
             sx={{
               display: 'grid',
@@ -70,25 +85,45 @@ export function CartPage() {
             }}
           >
             <Stack spacing={2}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
+                <Typography color="text.secondary">
+                  {cartQuery.data?.totalQuantity ?? 0} ürün sepetinizde
+                </Typography>
+                <Button
+                  color="inherit"
+                  onClick={() => clearCartMutation.mutate()}
+                  disabled={isMutating}
+                >
+                  Sepeti Temizle
+                </Button>
+              </Stack>
               {items.map((item) => (
                 <CartItemRow
                   key={item.id}
                   item={item}
-                  onQuantityChange={(quantity) => updateQuantity(item.id, quantity)}
-                  onRemove={() => removeItem(item.id)}
+                  disabled={isMutating}
+                  onQuantityChange={(quantity) =>
+                    updateQuantityMutation.mutate({
+                      itemId: item.id,
+                      quantity,
+                    })
+                  }
+                  onRemove={() => removeItemMutation.mutate(item.id)}
                 />
               ))}
             </Stack>
             <CartSummaryCard totals={totals} />
           </Box>
-        ) : (
+        ) : null}
+
+        {!cartQuery.isLoading && !items.length && !cartQuery.isError ? (
           <EmptyState
             title="Sepetiniz boş"
             description="Asc Moda koleksiyonundan seçili parçaları sepete ekleyerek devam edebilirsiniz."
             actionLabel="Alışverişe Başla"
             actionHref="/products"
           />
-        )}
+        ) : null}
       </PageContainer>
     </>
   );
@@ -96,13 +131,12 @@ export function CartPage() {
 
 type CartItemRowProps = {
   item: CartItem;
+  disabled?: boolean;
   onQuantityChange: (quantity: number) => void;
   onRemove: () => void;
 };
 
-function CartItemRow({ item, onQuantityChange, onRemove }: CartItemRowProps) {
-  const lineTotal = item.product.price * item.quantity;
-
+function CartItemRow({ item, disabled, onQuantityChange, onRemove }: CartItemRowProps) {
   return (
     <Paper
       elevation={0}
@@ -124,15 +158,11 @@ function CartItemRow({ item, onQuantityChange, onRemove }: CartItemRowProps) {
           alignItems: 'center',
         }}
       >
-        <Box
-          component={RouterLink}
-          to={`/products/${item.product.slug}`}
-          sx={{ alignSelf: 'stretch' }}
-        >
+        <Box component={RouterLink} to={`/products/${item.productSlug}`} sx={{ alignSelf: 'stretch' }}>
           <Box
             component="img"
-            src={item.product.images[0]}
-            alt={item.product.name}
+            src={item.imageUrl}
+            alt={item.productName}
             sx={{
               width: '100%',
               height: { xs: 124, md: 154 },
@@ -148,17 +178,17 @@ function CartItemRow({ item, onQuantityChange, onRemove }: CartItemRowProps) {
             <Box>
               <Typography
                 component={RouterLink}
-                to={`/products/${item.product.slug}`}
+                to={`/products/${item.productSlug}`}
                 variant="h5"
                 sx={{ display: 'block' }}
               >
-                {item.product.name}
+                {item.productName}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                {item.color} / {item.size}
+                {[item.color, item.size].filter(Boolean).join(' / ') || item.variantName || item.sku}
               </Typography>
             </Box>
-            <IconButton aria-label="Ürünü sepetten çıkar" onClick={onRemove}>
+            <IconButton aria-label="Ürünü sepetten çıkar" onClick={onRemove} disabled={disabled}>
               <DeleteOutlineIcon />
             </IconButton>
           </Stack>
@@ -174,12 +204,13 @@ function CartItemRow({ item, onQuantityChange, onRemove }: CartItemRowProps) {
             <QuantitySelector
               value={item.quantity}
               onChange={onQuantityChange}
-              max={item.product.stock}
+              max={10}
+              disabled={disabled}
             />
             <Stack spacing={0.25}>
-              <PriceDisplay price={item.product.price} size="sm" />
+              <PriceDisplay price={item.unitPrice} size="sm" />
               <Typography variant="body2" color="text.secondary">
-                Satır toplamı: {formatCurrency(lineTotal)}
+                Satır toplamı: {formatCurrency(item.lineTotal)}
               </Typography>
             </Stack>
           </Stack>
@@ -189,8 +220,8 @@ function CartItemRow({ item, onQuantityChange, onRemove }: CartItemRowProps) {
           <Typography variant="body2" color="text.secondary">
             Satır toplamı
           </Typography>
-          <Typography variant="h5">{formatCurrency(lineTotal)}</Typography>
-          <Button size="small" color="inherit" onClick={onRemove}>
+          <Typography variant="h5">{formatCurrency(item.lineTotal)}</Typography>
+          <Button size="small" color="inherit" onClick={onRemove} disabled={disabled}>
             Sil
           </Button>
         </Stack>
@@ -198,4 +229,3 @@ function CartItemRow({ item, onQuantityChange, onRemove }: CartItemRowProps) {
     </Paper>
   );
 }
-

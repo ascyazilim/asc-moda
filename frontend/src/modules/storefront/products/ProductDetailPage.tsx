@@ -27,38 +27,105 @@ import { SectionHeader } from '../../../components/common/SectionHeader';
 import { PriceDisplay } from '../../../components/ui/PriceDisplay';
 import { ProductCard } from '../../../components/ui/ProductCard';
 import { QuantitySelector } from '../../../components/ui/QuantitySelector';
-import { useProductDetail } from '../../../hooks/useStorefrontQueries';
-import { storefrontProducts } from '../mock/storefrontData';
+import {
+  useAddCartItemMutation,
+  useProductDetail,
+  useProducts,
+} from '../../../hooks/useStorefrontQueries';
+import { normalizeApiError } from '../../../services/api/client';
 
 export function ProductDetailPage() {
   const { slug } = useParams();
   const productQuery = useProductDetail(slug);
   const product = productQuery.data;
+  const relatedQuery = useProducts({
+    categorySlug: product?.categorySlug ?? 'all',
+    page: 1,
+    size: 4,
+    sort: 'featured',
+  });
+  const addCartMutation = useAddCartItemMutation();
   const [activeImage, setActiveImage] = useState('');
   const [selectedColor, setSelectedColor] = useState('');
   const [selectedSize, setSelectedSize] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [tab, setTab] = useState(0);
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [feedback, setFeedback] = useState<{
+    open: boolean;
+    severity: 'success' | 'error';
+    message: string;
+  }>({
+    open: false,
+    severity: 'success',
+    message: '',
+  });
 
   useEffect(() => {
     if (product) {
       setActiveImage(product.images[0]);
-      setSelectedColor(product.colors[0]?.name ?? '');
-      setSelectedSize(product.sizes[0] ?? '');
+      setSelectedColor(product.colors[0]?.name ?? product.variants[0]?.color ?? '');
+      setSelectedSize(product.sizes[0] ?? product.variants[0]?.size ?? '');
       setQuantity(1);
     }
   }, [product]);
+
+  const selectedVariant = useMemo(() => {
+    if (!product?.variants.length) {
+      return undefined;
+    }
+
+    return (
+      product.variants.find((variant) => {
+        const matchesColor = selectedColor ? variant.color === selectedColor : true;
+        const matchesSize = selectedSize ? variant.size === selectedSize : true;
+
+        return matchesColor && matchesSize;
+      }) ?? product.variants[0]
+    );
+  }, [product, selectedColor, selectedSize]);
 
   const relatedProducts = useMemo(() => {
     if (!product) {
       return [];
     }
 
-    return storefrontProducts
-      .filter((item) => item.category === product.category && item.id !== product.id)
-      .slice(0, 4);
-  }, [product]);
+    return (relatedQuery.data?.items ?? []).filter((item) => item.id !== product.id).slice(0, 4);
+  }, [product, relatedQuery.data?.items]);
+
+  const addToCart = () => {
+    if (!selectedVariant) {
+      setFeedback({
+        open: true,
+        severity: 'error',
+        message: 'Bu ürün için sepete eklenebilir aktif varyant bulunamadı.',
+      });
+      return;
+    }
+
+    addCartMutation.mutate(
+      {
+        productVariantId: selectedVariant.id,
+        sku: selectedVariant.sku,
+        quantity,
+      },
+      {
+        onSuccess: () => {
+          setFeedback({
+            open: true,
+            severity: 'success',
+            message: 'Ürün sepetinize eklendi.',
+          });
+        },
+        onError: (error) => {
+          setFeedback({
+            open: true,
+            severity: 'error',
+            message: normalizeApiError(error).message,
+          });
+        },
+      },
+    );
+  };
 
   if (productQuery.isLoading) {
     return (
@@ -66,6 +133,19 @@ export function ProductDetailPage() {
         <Stack alignItems="center" sx={{ py: 10 }}>
           <CircularProgress color="secondary" />
         </Stack>
+      </PageContainer>
+    );
+  }
+
+  if (productQuery.isError) {
+    return (
+      <PageContainer>
+        <EmptyState
+          title="Ürün yüklenemedi"
+          description="Ürün detayına şu anda ulaşılamıyor. Lütfen backend servisinin çalıştığından emin olun."
+          actionLabel="Ürünlere Dön"
+          actionHref="/products"
+        />
       </PageContainer>
     );
   }
@@ -102,7 +182,7 @@ export function ProductDetailPage() {
               <Box
                 component="img"
                 src={activeImage}
-                alt={product.name}
+                alt={product.imageAlt ?? product.name}
                 sx={{
                   width: '100%',
                   aspectRatio: { xs: '4 / 5', md: '5 / 6' },
@@ -155,86 +235,100 @@ export function ProductDetailPage() {
                 <Typography variant="h1">{product.name}</Typography>
                 <Typography color="text.secondary">{product.description}</Typography>
                 <PriceDisplay
-                  price={product.price}
+                  price={selectedVariant?.price ?? product.price}
+                  maxPrice={selectedVariant ? undefined : product.maxPrice}
                   compareAtPrice={product.compareAtPrice}
                   size="lg"
                 />
+                {selectedVariant?.stockKeepingNote ? (
+                  <Alert severity="info">{selectedVariant.stockKeepingNote}</Alert>
+                ) : null}
               </Stack>
 
               <Divider />
 
-              <Stack spacing={2}>
-                <Typography variant="h6">Renk</Typography>
-                <ToggleButtonGroup
-                  exclusive
-                  value={selectedColor}
-                  onChange={(_, value) => {
-                    if (value) {
-                      setSelectedColor(value);
-                    }
-                  }}
-                  sx={{ flexWrap: 'wrap', gap: 1 }}
-                >
-                  {product.colors.map((color) => (
-                    <ToggleButton
-                      key={color.name}
-                      value={color.name}
-                      sx={{ gap: 1, borderRadius: '999px !important', px: 1.5 }}
-                    >
-                      <Box
-                        sx={{
-                          width: 18,
-                          height: 18,
-                          borderRadius: '50%',
-                          bgcolor: color.value,
-                          border: 1,
-                          borderColor: 'divider',
-                        }}
-                      />
-                      {color.name}
-                    </ToggleButton>
-                  ))}
-                </ToggleButtonGroup>
-              </Stack>
+              {product.colors.length ? (
+                <Stack spacing={2}>
+                  <Typography variant="h6">Renk</Typography>
+                  <ToggleButtonGroup
+                    exclusive
+                    value={selectedColor}
+                    onChange={(_, value) => {
+                      if (value) {
+                        setSelectedColor(value);
+                      }
+                    }}
+                    sx={{ flexWrap: 'wrap', gap: 1 }}
+                  >
+                    {product.colors.map((color) => (
+                      <ToggleButton
+                        key={color.name}
+                        value={color.name}
+                        sx={{ gap: 1, borderRadius: '999px !important', px: 1.5 }}
+                      >
+                        <Box
+                          sx={{
+                            width: 18,
+                            height: 18,
+                            borderRadius: '50%',
+                            bgcolor: color.value,
+                            border: 1,
+                            borderColor: 'divider',
+                          }}
+                        />
+                        {color.name}
+                      </ToggleButton>
+                    ))}
+                  </ToggleButtonGroup>
+                </Stack>
+              ) : null}
 
-              <Stack spacing={2}>
-                <Typography variant="h6">Beden</Typography>
-                <ToggleButtonGroup
-                  exclusive
-                  value={selectedSize}
-                  onChange={(_, value) => {
-                    if (value) {
-                      setSelectedSize(value);
-                    }
-                  }}
-                  sx={{ flexWrap: 'wrap', gap: 1 }}
-                >
-                  {product.sizes.map((size) => (
-                    <ToggleButton
-                      key={size}
-                      value={size}
-                      sx={{
-                        minWidth: 54,
-                        borderRadius: '999px !important',
-                        px: 2,
-                      }}
-                    >
-                      {size}
-                    </ToggleButton>
-                  ))}
-                </ToggleButtonGroup>
-              </Stack>
+              {product.sizes.length ? (
+                <Stack spacing={2}>
+                  <Typography variant="h6">Beden</Typography>
+                  <ToggleButtonGroup
+                    exclusive
+                    value={selectedSize}
+                    onChange={(_, value) => {
+                      if (value) {
+                        setSelectedSize(value);
+                      }
+                    }}
+                    sx={{ flexWrap: 'wrap', gap: 1 }}
+                  >
+                    {product.sizes.map((size) => (
+                      <ToggleButton
+                        key={size}
+                        value={size}
+                        sx={{
+                          minWidth: 54,
+                          borderRadius: '999px !important',
+                          px: 2,
+                        }}
+                      >
+                        {size}
+                      </ToggleButton>
+                    ))}
+                  </ToggleButtonGroup>
+                </Stack>
+              ) : null}
 
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-                <QuantitySelector value={quantity} onChange={setQuantity} max={product.stock} />
+                <QuantitySelector
+                  value={quantity}
+                  onChange={setQuantity}
+                  max={product.stock ?? 10}
+                  disabled={!selectedVariant || addCartMutation.isPending}
+                />
                 <Button
                   variant="contained"
                   size="large"
                   startIcon={<AddShoppingCartIcon />}
-                  onClick={() => setSnackbarOpen(true)}
+                  onClick={addToCart}
+                  disabled={!selectedVariant || addCartMutation.isPending}
                   fullWidth
                 >
-                  Sepete Ekle
+                  {addCartMutation.isPending ? 'Ekleniyor' : 'Sepete Ekle'}
                 </Button>
                 <Button variant="outlined" size="large" startIcon={<FavoriteBorderIcon />}>
                   Favori
@@ -259,15 +353,14 @@ export function ProductDetailPage() {
                   ) : null}
                   {tab === 1 ? (
                     <Typography color="text.secondary">
-                      Hassas dokular için düşük ısıda ütü ve nazik yıkama önerilir. Ürün
-                      bakım talimatları gerçek katalog entegrasyonunda backend verisiyle
-                      güncellenecek.
+                      Hassas dokular için düşük ısıda ütü ve nazik yıkama önerilir. Bakım
+                      açıklamaları katalog verisi genişledikçe ürün bazlı güncellenebilir.
                     </Typography>
                   ) : null}
                   {tab === 2 ? (
                     <Typography color="text.secondary">
-                      Kargo ve iade akışları checkout entegrasyonu sırasında gerçek servis
-                      kurallarına bağlanacak.
+                      Kargo ve iade kuralları checkout aşamasında gerçek operasyon
+                      servislerine bağlanacak.
                     </Typography>
                   ) : null}
                 </Box>
@@ -282,7 +375,7 @@ export function ProductDetailPage() {
               eyebrow="Benzer Ürünler"
               title="Bu stile yakın parçalar"
               actionLabel="Tümünü Gör"
-              actionHref={`/products?category=${product.category}`}
+              actionHref={`/products?categorySlug=${product.categorySlug}`}
             />
             <Grid container spacing={{ xs: 2, md: 3 }}>
               {relatedProducts.map((relatedProduct) => (
@@ -296,16 +389,19 @@ export function ProductDetailPage() {
       </Stack>
 
       <Snackbar
-        open={snackbarOpen}
-        autoHideDuration={2600}
-        onClose={() => setSnackbarOpen(false)}
+        open={feedback.open}
+        autoHideDuration={3000}
+        onClose={() => setFeedback((current) => ({ ...current, open: false }))}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert severity="success" variant="filled" onClose={() => setSnackbarOpen(false)}>
-          Ürün sepete eklenmek üzere hazırlandı.
+        <Alert
+          severity={feedback.severity}
+          variant="filled"
+          onClose={() => setFeedback((current) => ({ ...current, open: false }))}
+        >
+          {feedback.message}
         </Alert>
       </Snackbar>
     </PageContainer>
   );
 }
-

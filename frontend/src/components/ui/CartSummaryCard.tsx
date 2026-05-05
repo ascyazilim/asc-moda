@@ -24,7 +24,9 @@ export function CartSummaryCard({ totals }: CartSummaryCardProps) {
         <Typography variant="h4">Sipariş Özeti</Typography>
         <Stack spacing={1.4}>
           <SummaryRow label="Ara toplam" value={formatCurrency(totals.subtotal)} />
-          <SummaryRow label="İndirim" value={`-${formatCurrency(totals.discount)}`} />
+          {totals.discount > 0 ? (
+            <SummaryRow label="İndirim" value={`-${formatCurrency(totals.discount)}`} />
+          ) : null}
           <SummaryRow
             label="Kargo"
             value={totals.shipping === 0 ? 'Ücretsiz' : formatCurrency(totals.shipping)}
@@ -59,4 +61,3 @@ function SummaryRow({ label, value, strong }: SummaryRowProps) {
     </Stack>
   );
 }
-
