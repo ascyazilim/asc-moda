@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { useAuth } from '../app/auth/AuthContext';
 import { cartApi, AddCartItemPayload } from '../services/api/cartApi';
 import { catalogApi } from '../services/api/catalogApi';
-import { apiConfig } from '../services/api/config';
+import { resolveCustomerId } from '../services/api/customerIdentity';
 import { queryKeys } from '../services/api/queryKeys';
 import { searchApi } from '../services/api/searchApi';
 import { ProductFilters } from '../types/product';
+import { useCurrentCustomer } from './useAccountQueries';
 
 export function useProducts(filters?: ProductFilters) {
   return useQuery({
@@ -56,62 +58,80 @@ export function useSearchResults(query: string, filters?: ProductFilters) {
   });
 }
 
-export function useCart(customerId = apiConfig.demoCustomerId) {
+export function useCart() {
+  const { isAuthenticated } = useAuth();
+  const currentCustomerQuery = useCurrentCustomer();
+  const customerId = resolveCustomerId(currentCustomerQuery.data);
+
   return useQuery({
-    queryKey: queryKeys.cart(customerId),
-    queryFn: () => cartApi.getCart(customerId),
+    queryKey: queryKeys.cart(customerId ?? 'guest'),
+    enabled: isAuthenticated && Boolean(customerId),
+    queryFn: () => cartApi.getCart(requireCustomerId(customerId)),
   });
 }
 
-export function useCartSummary(customerId = apiConfig.demoCustomerId) {
+export function useCartSummary() {
+  const { isAuthenticated } = useAuth();
+  const currentCustomerQuery = useCurrentCustomer();
+  const customerId = resolveCustomerId(currentCustomerQuery.data);
+
   return useQuery({
-    queryKey: queryKeys.cartSummary(customerId),
-    queryFn: () => cartApi.getSummary(customerId),
+    queryKey: queryKeys.cartSummary(customerId ?? 'guest'),
+    enabled: isAuthenticated && Boolean(customerId),
+    queryFn: () => cartApi.getSummary(requireCustomerId(customerId)),
     retry: false,
   });
 }
 
-export function useAddCartItemMutation(customerId = apiConfig.demoCustomerId) {
+export function useAddCartItemMutation() {
   const queryClient = useQueryClient();
+  const currentCustomerQuery = useCurrentCustomer();
+  const customerId = resolveCustomerId(currentCustomerQuery.data);
 
   return useMutation({
-    mutationFn: (payload: AddCartItemPayload) => cartApi.addItem(payload, customerId),
+    mutationFn: (payload: AddCartItemPayload) => cartApi.addItem(payload, requireCustomerId(customerId)),
     onSuccess: () => {
-      invalidateCartQueries(queryClient, customerId);
+      invalidateCartQueries(queryClient, requireCustomerId(customerId));
     },
   });
 }
 
-export function useUpdateCartItemQuantityMutation(customerId = apiConfig.demoCustomerId) {
+export function useUpdateCartItemQuantityMutation() {
   const queryClient = useQueryClient();
+  const currentCustomerQuery = useCurrentCustomer();
+  const customerId = resolveCustomerId(currentCustomerQuery.data);
 
   return useMutation({
     mutationFn: ({ itemId, quantity }: { itemId: string; quantity: number }) =>
-      cartApi.updateQuantity(itemId, quantity, customerId),
+      cartApi.updateQuantity(itemId, quantity, requireCustomerId(customerId)),
     onSuccess: () => {
-      invalidateCartQueries(queryClient, customerId);
+      invalidateCartQueries(queryClient, requireCustomerId(customerId));
     },
   });
 }
 
-export function useRemoveCartItemMutation(customerId = apiConfig.demoCustomerId) {
+export function useRemoveCartItemMutation() {
   const queryClient = useQueryClient();
+  const currentCustomerQuery = useCurrentCustomer();
+  const customerId = resolveCustomerId(currentCustomerQuery.data);
 
   return useMutation({
-    mutationFn: (itemId: string) => cartApi.removeItem(itemId, customerId),
+    mutationFn: (itemId: string) => cartApi.removeItem(itemId, requireCustomerId(customerId)),
     onSuccess: () => {
-      invalidateCartQueries(queryClient, customerId);
+      invalidateCartQueries(queryClient, requireCustomerId(customerId));
     },
   });
 }
 
-export function useClearCartMutation(customerId = apiConfig.demoCustomerId) {
+export function useClearCartMutation() {
   const queryClient = useQueryClient();
+  const currentCustomerQuery = useCurrentCustomer();
+  const customerId = resolveCustomerId(currentCustomerQuery.data);
 
   return useMutation({
-    mutationFn: () => cartApi.clearCart(customerId),
+    mutationFn: () => cartApi.clearCart(requireCustomerId(customerId)),
     onSuccess: () => {
-      invalidateCartQueries(queryClient, customerId);
+      invalidateCartQueries(queryClient, requireCustomerId(customerId));
     },
   });
 }
@@ -123,4 +143,12 @@ function invalidateCartQueries(queryClient: ReturnType<typeof useQueryClient>, c
   queryClient.invalidateQueries({
     queryKey: queryKeys.cartSummary(customerId),
   });
+}
+
+function requireCustomerId(customerId: string | undefined) {
+  if (!customerId) {
+    throw new Error('Sepet icin musteri oturumu hazir degil.');
+  }
+
+  return customerId;
 }

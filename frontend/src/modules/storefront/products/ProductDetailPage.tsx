@@ -21,6 +21,7 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 
+import { useAuth } from '../../../app/auth/AuthContext';
 import { EmptyState } from '../../../components/common/EmptyState';
 import { PageContainer } from '../../../components/common/PageContainer';
 import { SectionHeader } from '../../../components/common/SectionHeader';
@@ -36,6 +37,7 @@ import { normalizeApiError } from '../../../services/api/client';
 
 export function ProductDetailPage() {
   const { slug } = useParams();
+  const auth = useAuth();
   const productQuery = useProductDetail(slug);
   const product = productQuery.data;
   const relatedQuery = useProducts({
@@ -93,6 +95,11 @@ export function ProductDetailPage() {
   }, [product, relatedQuery.data?.items]);
 
   const addToCart = () => {
+    if (!auth.isAuthenticated) {
+      void auth.login(window.location.href);
+      return;
+    }
+
     if (!selectedVariant) {
       setFeedback({
         open: true,
@@ -325,10 +332,14 @@ export function ProductDetailPage() {
                   size="large"
                   startIcon={<AddShoppingCartIcon />}
                   onClick={addToCart}
-                  disabled={!selectedVariant || addCartMutation.isPending}
+                  disabled={!selectedVariant || addCartMutation.isPending || auth.isLoading}
                   fullWidth
                 >
-                  {addCartMutation.isPending ? 'Ekleniyor' : 'Sepete Ekle'}
+                  {addCartMutation.isPending
+                    ? 'Ekleniyor'
+                    : auth.isAuthenticated
+                      ? 'Sepete Ekle'
+                      : 'Giris Yapip Sepete Ekle'}
                 </Button>
                 <Button variant="outlined" size="large" startIcon={<FavoriteBorderIcon />}>
                   Favori

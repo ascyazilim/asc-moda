@@ -8,4 +8,10 @@ export const queryKeys = {
   search: (query: string, filters: unknown) => ['search', query, filters] as const,
   cart: (customerId: string) => ['cart', customerId] as const,
   cartSummary: (customerId: string) => ['cart', customerId, 'summary'] as const,
+  currentCustomer: (subject: string | undefined) => ['customer', 'current', subject ?? 'guest'] as const,
+  customerAddresses: (customerId: string | undefined) =>
+    ['customer', customerId ?? 'pending', 'addresses'] as const,
+  customerOrders: (customerId: string | undefined, page: number) =>
+    ['customer', customerId ?? 'pending', 'orders', page] as const,
+  orderDetail: (orderId: string | undefined) => ['orders', orderId ?? 'pending'] as const,
 };

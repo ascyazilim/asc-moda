@@ -19,6 +19,7 @@ import { PageHero } from '../../../components/common/PageHero';
 import { CartSummaryCard } from '../../../components/ui/CartSummaryCard';
 import { PriceDisplay } from '../../../components/ui/PriceDisplay';
 import { QuantitySelector } from '../../../components/ui/QuantitySelector';
+import { useCurrentCustomer } from '../../../hooks/useAccountQueries';
 import {
   useCart,
   useCartSummary,
@@ -30,6 +31,7 @@ import { CartItem, CartTotals } from '../../../types/cart';
 import { formatCurrency } from '../../../utils/formatters';
 
 export function CartPage() {
+  const currentCustomerQuery = useCurrentCustomer();
   const cartQuery = useCart();
   const summaryQuery = useCartSummary();
   const updateQuantityMutation = useUpdateCartItemQuantityMutation();
@@ -51,6 +53,7 @@ export function CartPage() {
     updateQuantityMutation.isPending ||
     removeItemMutation.isPending ||
     clearCartMutation.isPending;
+  const isLoading = currentCustomerQuery.isLoading || cartQuery.isLoading;
 
   return (
     <>
@@ -63,19 +66,27 @@ export function CartPage() {
       </PageContainer>
 
       <PageContainer>
-        {cartQuery.isLoading ? (
+        {isLoading ? (
           <Stack alignItems="center" sx={{ py: 8 }}>
             <CircularProgress color="secondary" />
           </Stack>
         ) : null}
 
-        {cartQuery.isError ? (
+        {currentCustomerQuery.isError ? (
           <Alert severity="error" sx={{ mb: 3 }}>
-            Sepet bilgisi yüklenemedi. Demo müşteri kimliği ve cart servisinin çalıştığından emin olun.
+            Hesap oturumu hazirlanamadi. Keycloak claimleri ve musteri servisinin calistigindan
+            emin olun.
           </Alert>
         ) : null}
 
-        {!cartQuery.isLoading && items.length ? (
+        {cartQuery.isError ? (
+          <Alert severity="error" sx={{ mb: 3 }}>
+            Sepet bilgisi yuklenemedi. Oturumunuzun musteri hesabi ile eslestiginden ve cart
+            servisinin calistigindan emin olun.
+          </Alert>
+        ) : null}
+
+        {!isLoading && items.length ? (
           <Box
             sx={{
               display: 'grid',
@@ -116,7 +127,7 @@ export function CartPage() {
           </Box>
         ) : null}
 
-        {!cartQuery.isLoading && !items.length && !cartQuery.isError ? (
+        {!isLoading && !items.length && !cartQuery.isError && !currentCustomerQuery.isError ? (
           <EmptyState
             title="Sepetiniz boş"
             description="Asc Moda koleksiyonundan seçili parçaları sepete ekleyerek devam edebilirsiniz."

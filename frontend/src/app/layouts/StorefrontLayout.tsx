@@ -2,8 +2,13 @@ import AccountCircleOutlinedIcon from '@mui/icons-material/AccountCircleOutlined
 import CloseIcon from '@mui/icons-material/Close';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import InstagramIcon from '@mui/icons-material/Instagram';
+import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
+import LoginOutlinedIcon from '@mui/icons-material/LoginOutlined';
+import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
 import MenuIcon from '@mui/icons-material/Menu';
 import PinterestIcon from '@mui/icons-material/Pinterest';
+import PersonOutlineOutlinedIcon from '@mui/icons-material/PersonOutlineOutlined';
+import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import SearchIcon from '@mui/icons-material/Search';
 import ShoppingBagOutlinedIcon from '@mui/icons-material/ShoppingBagOutlined';
 import {
@@ -16,13 +21,17 @@ import {
   Drawer,
   IconButton,
   Link,
+  ListItemIcon,
+  Menu,
+  MenuItem,
   Stack,
   Toolbar,
   Typography,
 } from '@mui/material';
-import { ReactNode, useState } from 'react';
+import { MouseEvent, ReactNode, useState } from 'react';
 import { Link as RouterLink, Outlet, useNavigate } from 'react-router-dom';
 
+import { useAuth } from '../auth/AuthContext';
 import { SearchInput } from '../../components/ui/SearchInput';
 import { useCartSummary } from '../../hooks/useStorefrontQueries';
 import { ScrollToTop } from '../router/ScrollToTop';
@@ -40,14 +49,35 @@ const navItems = [
 export function StorefrontLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [accountMenuAnchor, setAccountMenuAnchor] = useState<HTMLElement | null>(null);
+  const auth = useAuth();
   const navigate = useNavigate();
   const cartSummaryQuery = useCartSummary();
   const cartQuantity = cartSummaryQuery.data?.totalQuantity ?? 0;
+  const displayName = auth.currentUser?.displayName ?? 'Hesabım';
+  const accountMenuOpen = Boolean(accountMenuAnchor);
 
   const handleSearch = () => {
     const query = searchTerm.trim();
     navigate(query ? `/search?q=${encodeURIComponent(query)}` : '/search');
     setMobileOpen(false);
+  };
+
+  const handleAccountButtonClick = (event: MouseEvent<HTMLElement>) => {
+    if (!auth.isAuthenticated) {
+      void auth.login(`${window.location.pathname}${window.location.search}`);
+      return;
+    }
+
+    setAccountMenuAnchor(event.currentTarget);
+  };
+
+  const closeAccountMenu = () => setAccountMenuAnchor(null);
+
+  const handleLogout = () => {
+    closeAccountMenu();
+    setMobileOpen(false);
+    void auth.logout();
   };
 
   const navigation = (
@@ -74,6 +104,42 @@ export function StorefrontLayout() {
         </Button>
       ))}
     </Stack>
+  );
+
+  const accountMenu = (
+    <Menu
+      anchorEl={accountMenuAnchor}
+      open={accountMenuOpen}
+      onClose={closeAccountMenu}
+      anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+    >
+      <MenuItem component={RouterLink} to="/account/profile" onClick={closeAccountMenu}>
+        <ListItemIcon>
+          <PersonOutlineOutlinedIcon fontSize="small" />
+        </ListItemIcon>
+        Profil
+      </MenuItem>
+      <MenuItem component={RouterLink} to="/account/addresses" onClick={closeAccountMenu}>
+        <ListItemIcon>
+          <LocationOnOutlinedIcon fontSize="small" />
+        </ListItemIcon>
+        Adreslerim
+      </MenuItem>
+      <MenuItem component={RouterLink} to="/account/orders" onClick={closeAccountMenu}>
+        <ListItemIcon>
+          <ReceiptLongOutlinedIcon fontSize="small" />
+        </ListItemIcon>
+        Siparişlerim
+      </MenuItem>
+      <Divider />
+      <MenuItem onClick={handleLogout}>
+        <ListItemIcon>
+          <LogoutOutlinedIcon fontSize="small" />
+        </ListItemIcon>
+        Çıkış Yap
+      </MenuItem>
+    </Menu>
   );
 
   return (
@@ -146,7 +212,28 @@ export function StorefrontLayout() {
               <IconButton aria-label="Favoriler">
                 <FavoriteBorderIcon />
               </IconButton>
-              <IconButton aria-label="Hesabım">
+              <Button
+                color="inherit"
+                startIcon={auth.isAuthenticated ? <AccountCircleOutlinedIcon /> : <LoginOutlinedIcon />}
+                onClick={handleAccountButtonClick}
+                disabled={auth.isLoading || (!auth.isAuthenticated && !auth.isConfigured)}
+                sx={{
+                  display: { xs: 'none', sm: 'inline-flex' },
+                  px: { sm: 1.5, md: 2 },
+                  maxWidth: { sm: 150, md: 190 },
+                  color: 'text.primary',
+                }}
+              >
+                <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {auth.isAuthenticated ? displayName : 'Giriş Yap'}
+                </Box>
+              </Button>
+              <IconButton
+                aria-label={auth.isAuthenticated ? 'Hesabım' : 'Giriş Yap'}
+                onClick={handleAccountButtonClick}
+                disabled={auth.isLoading || (!auth.isAuthenticated && !auth.isConfigured)}
+                sx={{ display: { xs: 'inline-flex', sm: 'none' } }}
+              >
                 <AccountCircleOutlinedIcon />
               </IconButton>
               <IconButton aria-label="Sepet" component={RouterLink} to="/cart">
@@ -156,6 +243,7 @@ export function StorefrontLayout() {
               </IconButton>
             </Stack>
           </Toolbar>
+          {accountMenu}
         </Container>
       </AppBar>
 
@@ -194,6 +282,64 @@ export function StorefrontLayout() {
           />
           <Divider />
           {navigation}
+          <Divider />
+          {auth.isAuthenticated ? (
+            <Stack spacing={0.5}>
+              <Typography variant="body2" color="text.secondary" sx={{ px: 1.5 }}>
+                {displayName}
+              </Typography>
+              <Button
+                component={RouterLink}
+                to="/account/profile"
+                startIcon={<PersonOutlineOutlinedIcon />}
+                color="inherit"
+                onClick={() => setMobileOpen(false)}
+                sx={{ justifyContent: 'flex-start' }}
+              >
+                Profil
+              </Button>
+              <Button
+                component={RouterLink}
+                to="/account/addresses"
+                startIcon={<LocationOnOutlinedIcon />}
+                color="inherit"
+                onClick={() => setMobileOpen(false)}
+                sx={{ justifyContent: 'flex-start' }}
+              >
+                Adreslerim
+              </Button>
+              <Button
+                component={RouterLink}
+                to="/account/orders"
+                startIcon={<ReceiptLongOutlinedIcon />}
+                color="inherit"
+                onClick={() => setMobileOpen(false)}
+                sx={{ justifyContent: 'flex-start' }}
+              >
+                Siparişlerim
+              </Button>
+              <Button
+                startIcon={<LogoutOutlinedIcon />}
+                color="inherit"
+                onClick={handleLogout}
+                sx={{ justifyContent: 'flex-start' }}
+              >
+                Çıkış Yap
+              </Button>
+            </Stack>
+          ) : (
+            <Button
+              variant="contained"
+              startIcon={<LoginOutlinedIcon />}
+              disabled={auth.isLoading || !auth.isConfigured}
+              onClick={() => {
+                setMobileOpen(false);
+                void auth.login(`${window.location.pathname}${window.location.search}`);
+              }}
+            >
+              Giriş Yap
+            </Button>
+          )}
           <Box sx={{ mt: 'auto' }}>
             <Typography variant="body2" color="text.secondary">
               Premium tesettür giyim için sade, zarif ve zamansız parçalar.
@@ -308,4 +454,3 @@ function FooterColumn({ title, children }: FooterColumnProps) {
     </Stack>
   );
 }
-
